@@ -1,0 +1,33 @@
+.card {
+    height: 100%;
+    
+}
+.table-flex {
+    width: 100%;
+    
+}
+.table-flex th, .table-flex td {
+    padding: .7rem;
+   
+    
+}
+
+.table-flex th {
+    font-size: 18px;
+    font-weight: 200;
+    color: #fff;
+    
+    
+}
+
+.table-flex tr {
+    font-size: 18px;
+}
+.card-body {
+    display: flex;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+
+  
+}

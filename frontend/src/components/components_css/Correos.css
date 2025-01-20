@@ -1,0 +1,96 @@
+
+.centrado {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.form-control {
+  width: 100%;
+}
+
+.btn {
+  margin-top: 1rem;
+}
+
+.card-img-top {
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+
+.col-md-4 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.option-verde {
+  background-color: #68ad6b; /* Verde */
+  color: #fff;
+   
+}
+.option-amarillo {
+  background-color: #ead143; /* Amarillo */
+  color: #000;
+}
+
+.option-rojo {
+  background-color: #e05555; /* Rojo */
+  color: #fff;
+}
+
+.option:hover {
+  color: blueviolet;
+  
+}
+
+.table-responsive {
+  margin-top: 1rem;
+  min-height: 500px;
+}
+
+.loader-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 50vh; /* Ajusta según tus necesidades */
+}
+
+.loader {
+  border: 12px solid #f3f3f3; /* Color de fondo */
+  border-top: 12px solid #3498db; /* Color del loader */
+  border-radius: 50%;
+  width: 80px;
+  height: 80px;
+  animation: spin 1.5s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.dropdown-container {
+  width: 100%;
+  position: relative;
+}
+
+.dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 300px; /* Ajusta según necesites */
+  overflow-y: auto;
+  z-index: 1000; /* Asegura que la lista se superponga a otros elementos */
+  background-color: #ffffff; /* Fondo blanco para la lista */
+  border: 1px solid #ced4da; /* Borde similar al input */
+  border-top: none; /* Elimina el borde superior para conexión suave con el input */
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Sombra para destacar la lista */
+}
+

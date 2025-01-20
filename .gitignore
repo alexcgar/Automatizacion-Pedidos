@@ -1,0 +1,9 @@
+backend/model/static/assets/fa-solid-900-CTAAxXor.woff2
+backend/model/static/assets/fa-v4compatibility-C9RhG_FT.woff2
+.env
+node_modules/
+dist/
+static/
+backups/
+backend/model/modelo_actualizado.joblib
+backend/model/consulta_resultado.csv

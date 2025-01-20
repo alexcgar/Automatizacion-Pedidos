@@ -1,0 +1,37 @@
+/* src/components/Navbar.css */
+.navbar-custom {
+    position: fixed; /* Fijarlo en la parte superior */
+    top: 0; /* Pegado al borde superior */
+    left: 0; /* Alineado al borde izquierdo */
+    background-color: #283746; /* Color de fondo */
+    width: 100%; /* Ancho completo */
+    z-index: 1000; /* Colocarlo por encima de otros elementos */
+    
+
+  }
+  
+  .navbar-custom .navbar-brand {
+    color: #ffffff; /* Color blanco para el texto */
+    font-size: 1.5rem;
+  }
+  
+  .navbar-custom .navbar-nav .nav-link {
+    color: #ffffff; /* Color blanco para los enlaces */
+    margin-right: 10px;
+  }
+  
+  .navbar-custom .navbar-nav .nav-link:hover {
+    color: #17a2b8; /* Color azul claro en el hover */
+  }
+  
+  .navbar-custom .navbar-toggler {
+    border-color: #17a2b8; /* Color del borde del botón toggle */
+  }
+  
+
+  .logo {
+    height: 1.8em;
+  }
+  .container, .container-fluid, .container-lg, .container-md, .container-sm, .container-xl, .container-xxl {
+    --bs-gutter-x: unset;
+}
