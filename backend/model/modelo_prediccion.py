@@ -564,7 +564,6 @@ def marcar_correo_leido():
 @app.route("/api/predicciones", methods=["GET"])
 def obtener_predicciones():
     global predicciones_recientes
-    print(predicciones_recientes)
     with predicciones_lock:
         if not predicciones_recientes:
             return jsonify({"message": "No se encontraron predicciones", "predicciones": []}), 200

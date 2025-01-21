@@ -17,17 +17,30 @@ function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showDashboard, setShowDashboard] = useState(true);
+
   const handleLogin = (isLoggedIn) => {
     setIsLoggedIn(isLoggedIn);
     setShowDashboard(true);
   };
 
   if (!isLoggedIn) {
-    return <Login setIsLoggedIn={handleLogin} setUserEmail={setEmail} setUserPassword={setPassword} />;
+    return (
+      <Login
+        setIsLoggedIn={handleLogin}
+        setUserEmail={setEmail}
+        setUserPassword={setPassword}
+      />
+    );
   }
 
   if (showDashboard && isLoggedIn) {
-    return <DashBoard onButtonClick={() => setShowDashboard(false)} />;
+    return (
+      <DashBoard
+        onButtonClick={() => setShowDashboard(false)}
+        email={email}
+        password={password}
+      />
+    );
   }
 
   return (

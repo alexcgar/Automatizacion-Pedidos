@@ -186,3 +186,63 @@ export const fetchEmployeeInfo = async (codCompany, codUser, idMessage) => { // 
     throw error;
   }
 };
+
+export const fetchAlbaranesSinFirmar = async (codCompany, idWarehouse) => {
+  try {
+    const token = await authenticate();
+
+    const response = await axios.post(
+      `${API_SERVER}/api/ZappStudio/getinfowindow`,
+      {
+        CodCompany: codCompany,
+        IDWarehouse: idWarehouse,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (response.data && response.data.success) {
+      return response.data.data;
+    } else {
+      console.error('Respuesta del servidor:', response.data);
+      throw new Error('Solicitud fallida: No se pudieron obtener los albaranes sin firmar.');
+    }
+  } catch (error) {
+    console.error('Error al obtener los albaranes sin firmar:', error);
+    throw error;
+  }
+}
+
+export const fetchDocumentosSinUbicar = async (codCompany, idWarehouse) => {
+  try {
+    const token = await authenticate();
+
+    const response = await axios.post(
+      `${API_SERVER}/api/ZappStudio/getinfowindow`,
+      {
+        CodCompany: codCompany,
+        IDWarehouse: idWarehouse,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (response.data && response.data.success) {
+      return response.data.data;
+    } else {
+      console.error('Respuesta del servidor:', response.data);
+      throw new Error('Solicitud fallida: No se pudieron obtener los albaranes sin firmar.');
+    }
+  } catch (error) {
+    console.error('Error al obtener documentos', error);
+    throw error;
+  }
+}

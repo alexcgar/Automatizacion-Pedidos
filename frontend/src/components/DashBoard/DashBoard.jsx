@@ -1,11 +1,55 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import "../components_css/DashBoard.css";
 import NavBar from "../Navbar/Navbar";
 import Footer from "../Footer/Footer";
+import { fetchAlbaranesSinFirmar, fetchLoginUser } from "../../Services/apiServices";
 
-const DashBoard = ({ onButtonClick }) => {
+const DashBoard = ({ onButtonClick }, email, password) => {
     const [showOrders, setShowOrders] = useState(false);
+    const [idWarehouse, setIdWarehouse] = useState(null);
+    const [albaranesData, setAlbaranesData] = useState([]);
+   
+   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        console.log("Fetching user info...");
+        const userInfo = await fetchLoginUser("1", email, password);
+        console.log("User Info:", userInfo);
+        setIdWarehouse(userInfo.IDWarehouse); // Set IDWarehouse state
+      } catch (error) {
+        console.error("Error fetching user info", error);
+      }
+    };
+
+    if (email && password) {
+      fetchData();
+    }
+  }, [email, password]); // Trigger when email or password changes
+
+  // Fetch albaranes data once idWarehouse is available
+  useEffect(() => {
+    const fetchAlbaranes = async () => {
+      if (idWarehouse) {
+        try {
+          console.log("Fetching albaranes data...");
+          const data = await fetchAlbaranesSinFirmar("1", idWarehouse);
+          setAlbaranesData(data); // Store the albaranes data
+          console.log("Albaranes Data:", data);
+        } catch (error) {
+          console.error("Error fetching albaranes data", error);
+        } finally {
+            console.log("Fetching albaranes data...");
+        }
+      }
+    };
+
+    if (idWarehouse) {
+      console.log("idWarehouse is available:", idWarehouse);
+      fetchAlbaranes();
+    }
+  }, [idWarehouse]); // This effect runs when idWarehouse changes
+
 
     const handleButtonClick = () => {
         setShowOrders(true);
@@ -87,7 +131,7 @@ const DashBoard = ({ onButtonClick }) => {
                                 </div>
                             </div>
                         </div>
-                        <div className="col-xl-6 col-xxl-6 p-">
+                        <div className="col-xl-6 col-xxl-6 p-3">
                             <div className="card border border-5">
                                 <div className="card-header">
                                     <h4 className="card-title mb-0" style={{ color: "#222E3C" }}>
@@ -96,38 +140,25 @@ const DashBoard = ({ onButtonClick }) => {
                                 </div>
                                 <div className="card-body m-2">
                                     <table className="table-flex table-bordered">
-                                        <thead
-                                            className="align-middle"
-                                            style={{ backgroundColor: "#222E3C" }}
-                                        >
+                                        <thead className="align-middle" style={{ backgroundColor: "#222E3C" }}>
                                             <tr>
                                                 <th>Empleado</th>
                                                 <th>Número de Albaranes Pendientes</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <tr>
-                                                <td>OT001</td>
-                                                <td>Proyecto A</td>
-                                            </tr>
-                                            <tr>
-                                                <td>OT001</td>
-                                                <td>Proyecto A</td>
-                                            </tr>
-                                            <tr>
-                                                <td>OT002</td>
-                                                <td>Proyecto B</td>
-                                            </tr>
-                                            <tr>
-                                                <td>OT003</td>
-                                                <td>Proyecto C</td>
-                                            </tr>
+                                            {albaranesData.map((item, index) => (
+                                                <tr key={index}>
+                                                    <td>{item.Description}</td>
+                                                    <td>{item.Items.length}</td>
+                                                </tr>
+                                            ))}
                                         </tbody>
                                     </table>
                                 </div>
                             </div>
                         </div>
-                        <div className="col-xl-6 col-xxl-6 ">
+                        <div className="col-xl-6 col-xxl-6 p-3">
                             <div className="card flex-fill h-100 border border-5">
                                 <div className="card-header">
                                     <h4 className="card-title mb-0" style={{ color: "#222E3C" }}>
@@ -136,10 +167,7 @@ const DashBoard = ({ onButtonClick }) => {
                                 </div>
                                 <div className="card-body m-2">
                                     <table className="table-flex table-bordered">
-                                        <thead
-                                            className="align-middle"
-                                            style={{ backgroundColor: "#222E3C" }}
-                                        >
+                                        <thead className="align-middle" style={{ backgroundColor: "#222E3C" }}>
                                             <tr>
                                                 <th>Número de Albarán</th>
                                                 <th>Empleado</th>
@@ -168,9 +196,9 @@ const DashBoard = ({ onButtonClick }) => {
                             </div>
                         </div>
                     </div>
+                    <Footer />
                 </div>
             </div>
-            <Footer />
         </div>
     );
 };
