@@ -41,7 +41,7 @@ const Employee = ({ productos = [], audioBase64, setIsLoggedIn, email, password 
 
     const fetchPredicciones = async () => {
       try {
-        const response = await fetch("http://10.83.0.17:5000/api/predicciones");
+        const response = await fetch("http://localhost:5000/api/predicciones");
 
         const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
@@ -104,7 +104,7 @@ const Employee = ({ productos = [], audioBase64, setIsLoggedIn, email, password 
       }
 
       // Fetch predicciones again to make sure we have the latest ones
-      const response = await fetch("http://10.83.0.17:5000/api/predicciones");
+      const response = await fetch("http://localhost:5000/api/predicciones");
       const predicciones = await response.json();
       console.log("Predicciones:", predicciones);
 
@@ -136,7 +136,7 @@ const Employee = ({ productos = [], audioBase64, setIsLoggedIn, email, password 
 
         const correoId = predicciones[0]?.correo_id;
         if (correoId) {
-          await axios.post("http://10.83.0.17:5000/api/marcar_leido", {
+          await axios.post("http://localhost:5000/api/marcar_leido", {
             correo_id: correoId,
           });
           console.log(`Correo ${correoId} marcado como leído.`);

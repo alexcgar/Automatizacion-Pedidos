@@ -33,7 +33,7 @@ const Correos = ({ setProductosSeleccionados }) => {
 
     const cargarCSV = async () => {
         try {
-            const response = await fetch("http://10.83.0.17:5000/api/cargar_csv");
+            const response = await fetch("http://localhost:5000/api/cargar_csv");
             const data = await response.json();
 
             if (data && data.data) {

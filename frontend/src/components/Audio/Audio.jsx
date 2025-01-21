@@ -22,19 +22,19 @@ function AudioPlayer({ setAudioBase64 }) {
   useEffect(() => {
     const handleObtenerAudio = () => {
       axios
-        .get("http://10.83.0.17:5000/api/getAudio", {
+        .get("http://localhost:5000/api/getAudio", {
           responseType: "arraybuffer",
         })
         .then((response) => {
           if (response.status === 200) {
-            // Convertir arraybuffer a base64
-            const base64String = arrayBufferToBase64(response.data);
-            setAudioBase64(base64String);
+        // Convertir arraybuffer a base64
+        const base64String = arrayBufferToBase64(response.data);
+        setAudioBase64(base64String);
 
-            // Crear Blob URL para reproducir el audio
-            const audioBlob = new Blob([response.data], { type: "audio/mp3" });
-            const url = URL.createObjectURL(audioBlob);
-            setAudioUrl(url);
+        // Crear Blob URL para reproducir el audio
+        const audioBlob = new Blob([response.data], { type: "audio/mp3" });
+        const url = URL.createObjectURL(audioBlob);
+        setAudioUrl(url);
           }
         });
     };
