@@ -222,7 +222,7 @@ export const fetchDocumentosSinUbicar = async (codCompany, idWarehouse) => {
     const token = await authenticate();
 
     const response = await axios.post(
-      `${API_SERVER}/api/ZappStudio/getinfowindow`,
+      `${API_SERVER}/api/MySGA/getinfowindow`,
       {
         CodCompany: codCompany,
         IDWarehouse: idWarehouse,
