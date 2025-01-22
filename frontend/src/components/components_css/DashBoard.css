@@ -1,19 +1,17 @@
-.card {
-    height: 100%;
-    
-}
+
 .table-flex {
     width: 100%;
     
 }
 .table-flex th, .table-flex td {
-    padding: .7rem;
+    padding: .5rem;
    
-    
 }
 
+
+
 .table-flex th {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 200;
     color: #fff;
     
@@ -21,7 +19,7 @@
 }
 
 .table-flex tr {
-    font-size: 18px;
+    font-size: 16px;
 }
 .card-body {
     display: flex;
@@ -30,4 +28,13 @@
     padding: 0;
 
   
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.spin {
+    animation: spin 2s linear infinite;
 }

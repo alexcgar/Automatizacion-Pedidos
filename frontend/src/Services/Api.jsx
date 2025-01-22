@@ -47,3 +47,14 @@ export const generateOrder = async (orderData) => {
     throw error;
   }
 };
+
+export const getIdMP3 = async () => {
+  try {
+    const response = await axios.get('http://localhost:5000/api/correos_mp3_ids');
+    console.log()
+    return response.data; 
+  } catch (error) {
+    console.error('Error al obtener IDs de MP3:', error);
+    return [];
+  }
+};

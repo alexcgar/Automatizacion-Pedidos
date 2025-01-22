@@ -9,6 +9,7 @@ import threading
 from threading import Lock
 
 # Importaciones para lectura de variables de entorno
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 # Importaciones para solicitudes HTTP y autenticación
@@ -523,25 +524,60 @@ def actualizar_predicciones_periodicamente():
             print(f"Error actualizando predicciones: {e}")
         time.sleep(10)
 
-@app.route("/api/obtener_ids_correos", methods=["GET"])
-def obtener_ids_correos():
+
+@app.route('/api/correos_mp3_ids', methods=['GET'])
+def obtener_ids_correos_mp3():
+    """
+    Endpoint para obtener los IDs únicos de correos no leídos con archivos adjuntos MP3
+    y la cantidad de productos en cada correo.
+    """
     try:
         token = obtener_token()
         headers = {
             "Authorization": f"Bearer {token}",
             "Accept": "application/json",
         }
-        filtro_no_leidos = "isRead eq false"
-        endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/mailFolders/Inbox/messages"
-        params = {"$filter": filtro_no_leidos, "$top": "10"}
 
+        endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/mailFolders/Inbox/messages"
+        params = {
+            "$filter": "isRead eq false and hasAttachments eq true",
+            "$expand": "attachments",
+            "$top": "50",
+        }
         response = requests.get(endpoint, headers=headers, params=params)
+
         if response.status_code == 200:
             messages = response.json().get("value", [])
-            ids_correos = [message.get("id", "") for message in messages]
-            return jsonify({"ids_correos": ids_correos}), 200
+            ids_con_conteo = []
+
+            for message in messages:
+                attachments = message.get("attachments", [])
+                for attachment in attachments:
+                    nombre_archivo = attachment.get("name", "")
+                    if nombre_archivo.lower().endswith(".mp3"):
+                        correo_id = message.get("id")
+                        if not any(item["correo_id"] == correo_id for item in ids_con_conteo):
+                            cuerpo = message.get("body", {}).get("content", "")
+                            if message.get("body", {}).get("contentType", "") == "html":
+                                soup = BeautifulSoup(cuerpo, "html.parser")
+                                cuerpo = soup.get_text()
+                            # Intentar parsear JSON y contar 'items'
+                            count_items = 0
+                            try:
+                                cuerpo = cuerpo.replace("'", '"')
+                                mensaje_json = json.loads(cuerpo)
+                                if "items" in mensaje_json:
+                                    count_items = len(mensaje_json["items"])
+                            except:
+                                pass
+                            ids_con_conteo.append({"correo_id": correo_id, "product_count": count_items})
+
+            return jsonify({"data": ids_con_conteo}), 200
         else:
-            return jsonify({"error": f"Error al obtener los correos: {response.status_code} - {response.text}"}), 500
+            return jsonify(
+                {"error": f"Error al obtener los correos: {response.status_code} - {response.text}"}
+            ), response.status_code
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     

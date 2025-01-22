@@ -70,8 +70,8 @@ const Employee = ({ productos = [], audioBase64, setIsLoggedIn, email, password 
 
       const entityData = {
         CodCompany: "1",
-        IDWorkOrder: "696c98a1-69f3-4bbc-8a8e-da8bf1a31bbc",
-        IDEmployee: "f9aaec71-d1d2-4fd7-8317-24950668e717",
+        IDWorkOrder: "1074241204161431", // datos de mazarrón
+        IDEmployee: "804f63b9-89fe-446e-a2c3-f11bb7be8e27",
         IDMessage: IdMessage,
         TextTranscription: predicciones
           .map((producto) => `${producto.descripcion}${producto.cantidad}`)

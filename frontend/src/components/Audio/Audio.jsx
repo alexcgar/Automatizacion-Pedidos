@@ -62,18 +62,14 @@ function AudioPlayer({ setAudioBase64 }) {
         }}
         style={{ backgroundColor: "#283746", width: "100%" }}
       >
-        {open ? (
-          <strong>Cerrar Detalles</strong>
-        ) : (
-          <strong>Ver Detalles del Audio</strong>
-        )}
+        {open ? "Cerrar Detalles" : "Ver Detalles del Audio"}
       </Button>
       <Collapse in={open} >
         <div className=" nova2 text-white">
           <Table bordered className=" text-white ">
             <thead>
               <tr>
-                <th className="text-white">REPRODUCTOR DE AUDIO</th>
+                <th className="text-white"></th>
                 <th className="text-white">ACCIONES</th>
               </tr>
             </thead>
