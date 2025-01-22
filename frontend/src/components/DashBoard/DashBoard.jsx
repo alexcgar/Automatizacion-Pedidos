@@ -8,6 +8,7 @@ import {
   fetchLoginUser,
 } from "../../Services/apiServices";
 import { getIdMP3 } from "../../Services/Api";
+import { Spinner } from "react-bootstrap";
 
 const DashBoard = ({ onButtonClick, email, password }) => {
   const [idWarehouse, setIdWarehouse] = useState(null);
@@ -26,8 +27,12 @@ const DashBoard = ({ onButtonClick, email, password }) => {
         const response = await getIdMP3();
         if (response && response.data) {
           setMp3Ids((prev) =>
-            [...new Set([...prev.map((item) => item.correo_id), ...response.data.map((d) => d.correo_id)])].map((id) => {
-              const foundItem = [...prev, ...response.data].find((obj) => obj.correo_id === id);
+            [
+              ...new Set([ ...prev.map((item) => item.correo_id), ...response.data.map((d) => d.correo_id), ]),
+            ].map((id) => {
+              const foundItem = [...prev, ...response.data].find(
+                (obj) => obj.correo_id === id
+              );
               return foundItem || { correo_id: id, product_count: 0 };
             })
           );
@@ -94,7 +99,9 @@ const DashBoard = ({ onButtonClick, email, password }) => {
             "aef9438a-784f-450e-a8e9-5fa9c98c895b"
           );
           setUbicacionesData((prevData) => [
-            ...prevData.filter((item) => !data.some((d) => d.Item === item.Item)),
+            ...prevData.filter(
+              (item) => !data.some((d) => d.Item === item.Item)
+            ),
             ...data,
           ]);
         } catch (error) {
@@ -131,18 +138,21 @@ const DashBoard = ({ onButtonClick, email, password }) => {
       </div>
 
       <div className="container-fluid ">
-          {loadingMp3 || loadingAlbaranes || loadingUbicaciones ? (
-            <div className="text-center mt-4" style={{ marginTop: "20px" }}>
-              <p>Cargando todos los datos...</p>
-              {/* Aquí puedes agregar un spinner o un loader visualmente más atractivo */}
-            </div>
-          ) : !allDataLoaded ? (
-            <div className="text-center mt-4" style={{ marginTop: "20px" }}>
-              <p>Cargando todos los datos...</p>
-            </div>
-          ) : (
-            <div className="row text-center">
-              {/* Tabla de Pedidos de Voz Recibidos */}
+        {loadingMp3 || loadingAlbaranes || loadingUbicaciones ? (
+          <div className="text-center " style={{ marginTop: "140px" }}>
+            <Spinner animation="border" role="status">
+              <span className="visually-hidden">Cargando...</span>
+            </Spinner>
+          </div>
+        ) : !allDataLoaded ? (
+          <div className="text-center " style={{ marginTop: "140px" }}>
+            <Spinner animation="border" role="status">
+              <span className="visually-hidden">Cargando...</span>
+            </Spinner>
+          </div>
+        ) : (
+          <div className="row text-center">
+            {/* Tabla de Pedidos de Voz Recibidos */}
             <div className="col-xl-4 col-xxl-4">
               <div className="card border border-3 mt-5">
                 <div className="card-header">
@@ -150,7 +160,7 @@ const DashBoard = ({ onButtonClick, email, password }) => {
                     Pedidos de Voz Recibidos
                   </h4>
                 </div>
-                <div className="card-body m-1">
+                <div className="card-body m-1 table-container">
                   <table className="table-flex table-bordered">
                     <thead style={{ backgroundColor: "#222E3C" }}>
                       <tr>
@@ -199,9 +209,12 @@ const DashBoard = ({ onButtonClick, email, password }) => {
                     Albaranes Pendientes de Firmar
                   </h4>
                 </div>
-                <div className="card-body m-1">
+                <div className="card-body table-container">
                   <table className="table-flex table-bordered">
-                    <thead className="align-middle" style={{ backgroundColor: "#222E3C" }}>
+                    <thead
+                      className="align-middle"
+                      style={{ backgroundColor: "#222E3C" }}
+                    >
                       <tr>
                         <th>Empleado</th>
                         <th>Número de Albaranes Pendientes</th>
@@ -228,9 +241,12 @@ const DashBoard = ({ onButtonClick, email, password }) => {
                     SGA: Pendientes de Ubicar/Desubicar
                   </h4>
                 </div>
-                <div className="card-body m-2">
+                <div className="card-body table-container">
                   <table className="table-flex table-bordered">
-                    <thead className="align-middle" style={{ backgroundColor: "#222E3C" }}>
+                    <thead
+                      className="align-middle"
+                      style={{ backgroundColor: "#222E3C" }}
+                    >
                       <tr>
                         <th>Número de Albarán</th>
                         <th>Empleado</th>

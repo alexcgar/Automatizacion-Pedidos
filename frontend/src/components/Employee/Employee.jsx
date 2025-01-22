@@ -203,8 +203,6 @@ const Employee = ({ productos = [], audioBase64, setIsLoggedIn, email, password 
         <Alert variant="success" className="text-center">
           <strong>Pedido generado correctamente:</strong>
           <br />
-          <strong>ID de Pedido:</strong> {orderGenerated.data.IDOrder}
-          <br />
           <strong>Código de Pedido:</strong> {orderGenerated.data.CodOrder}
           <br />
           <strong>Fecha de Pedido:</strong>{" "}

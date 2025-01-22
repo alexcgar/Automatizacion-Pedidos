@@ -1,40 +1,32 @@
-
 .table-flex {
     width: 100%;
-    
 }
+
 .table-flex th, .table-flex td {
-    padding: .5rem;
-   
+    padding: .5rem;  
 }
-
-
 
 .table-flex th {
     font-size: 16px;
     font-weight: 200;
     color: #fff;
-    
-    
+    padding: 10;   
 }
 
 .table-flex tr {
     font-size: 16px;
 }
+
 .card-body {
     display: flex;
     justify-content: center;
     margin: 0;
     padding: 0;
+}
 
+.table-container {
+    max-height: 650px; /* Cambia el valor según lo necesites */
+    overflow-y: auto;
+    margin-top: 10px;
+  }
   
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-.spin {
-    animation: spin 2s linear infinite;
-}
