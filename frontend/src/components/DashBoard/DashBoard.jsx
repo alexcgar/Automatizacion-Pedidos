@@ -14,13 +14,13 @@ const DashBoard = ({ onButtonClick, email, password }) => {
   const [albaranesData, setAlbaranesData] = useState([]);
   const [ubicacionesData, setUbicacionesData] = useState([]);
   const [mp3Ids, setMp3Ids] = useState([]);
-  const [loading, setLoading] = useState(true); // Inicializamos como verdadero para mostrar el loader
+  const [loadingAlbaranes, setLoadingAlbaranes] = useState(true); // loading para albaranes
+  const [loadingUbicaciones, setLoadingUbicaciones] = useState(true); // loading para ubicaciones
+  const [loadingMp3, setLoadingMp3] = useState(true); // loading para mp3
   const [allDataLoaded, setAllDataLoaded] = useState(false); // Bandera para saber si todos los datos se han cargado
 
   // Fetch MP3 IDs every 60 seconds
   useEffect(() => {
-    let intervalId;
-
     const fetchMp3Ids = async () => {
       try {
         const response = await getIdMP3();
@@ -35,19 +35,17 @@ const DashBoard = ({ onButtonClick, email, password }) => {
       } catch (error) {
         console.error("Error fetching MP3 IDs", error);
       } finally {
-        setLoading(false); // Termina el loading
+        setLoadingMp3(false); // Termina el loading de mp3
       }
     };
 
     fetchMp3Ids();
-    intervalId = setInterval(fetchMp3Ids, 60000);
+    const intervalId = setInterval(fetchMp3Ids, 60000);
 
     return () => clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
-    let intervalId;
-
     const fetchData = async () => {
       try {
         if (email && password) {
@@ -61,44 +59,35 @@ const DashBoard = ({ onButtonClick, email, password }) => {
 
     if (email && password) {
       fetchData();
-      intervalId = setInterval(fetchData, 60000);
     }
-    return () => clearInterval(intervalId);
   }, [email, password]);
 
   // Fetch Albaranes Sin Firmar
   useEffect(() => {
-    let intervalId;
-
     const fetchAlbaranes = async () => {
       if (idWarehouse) {
-        setLoading(true); // Mostrar el loading mientras se cargan los albaranes
+        setLoadingAlbaranes(true); // Muestra el loading mientras se cargan los albaranes
         try {
           const data = await fetchAlbaranesSinFirmar("1", idWarehouse);
           setAlbaranesData(data);
         } catch (error) {
           console.error("Error fetching albaranes data", error);
         } finally {
-          setLoading(false); // Termina el loading
+          setLoadingAlbaranes(false); // Termina el loading de albaranes
         }
       }
     };
 
     if (idWarehouse) {
       fetchAlbaranes();
-      intervalId = setInterval(fetchAlbaranes, 60000);
     }
-
-    return () => clearInterval(intervalId);
   }, [idWarehouse]);
 
   // Fetch documentos sin ubicar and keep existing data
   useEffect(() => {
-    let intervalId;
-
     const fetchUbicaciones = async () => {
       if (idWarehouse) {
-        setLoading(true); // Mostrar el loading mientras se cargan las ubicaciones
+        setLoadingUbicaciones(true); // Muestra el loading mientras se cargan las ubicaciones
         try {
           const data = await fetchDocumentosSinUbicar(
             "1",
@@ -111,25 +100,22 @@ const DashBoard = ({ onButtonClick, email, password }) => {
         } catch (error) {
           console.error("Error fetching ubicaciones data", error);
         } finally {
-          setLoading(false); // Termina el loading
+          setLoadingUbicaciones(false); // Termina el loading de ubicaciones
         }
       }
     };
 
     if (idWarehouse) {
       fetchUbicaciones();
-      intervalId = setInterval(fetchUbicaciones, 60000);
     }
-
-    return () => clearInterval(intervalId);
   }, [idWarehouse]);
 
   // Verificar si todos los datos están cargados
   useEffect(() => {
-    if (mp3Ids.length > 0 && albaranesData.length > 0 && ubicacionesData.length > 0) {
+    if (!loadingMp3 && !loadingAlbaranes && !loadingUbicaciones) {
       setAllDataLoaded(true); // Si todos los datos están cargados, cambia la bandera
     }
-  }, [mp3Ids, albaranesData, ubicacionesData]);
+  }, [loadingMp3, loadingAlbaranes, loadingUbicaciones]);
 
   const handleButtonClick = (id) => {
     console.log(`ID del botón: ${id}`);
@@ -144,15 +130,15 @@ const DashBoard = ({ onButtonClick, email, password }) => {
         </div>
       </div>
 
-      <div className="container-fluid">
-        
-          {loading ? (
-            <div className="text-center mt-2">
-              <img src="/src/assets/novaLogo.png" alt="Loading..." className="mt-5 spin" style={{ width: "80px", height: "70px" }} />
+      <div className="container-fluid ">
+          {loadingMp3 || loadingAlbaranes || loadingUbicaciones ? (
+            <div className="text-center mt-4" style={{ marginTop: "20px" }}>
+              <p>Cargando todos los datos...</p>
+              {/* Aquí puedes agregar un spinner o un loader visualmente más atractivo */}
             </div>
           ) : !allDataLoaded ? (
-            <div className="text-center mt-5">
-              <img src="/src/assets/novaLogo.png" alt="Loading..." className="mt-5 spin" style={{ width: "80px", height: "70px" }} />
+            <div className="text-center mt-4" style={{ marginTop: "20px" }}>
+              <p>Cargando todos los datos...</p>
             </div>
           ) : (
             <div className="row text-center">
