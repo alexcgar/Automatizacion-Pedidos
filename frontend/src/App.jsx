@@ -29,6 +29,7 @@ function App() {
         setIsLoggedIn={handleLogin}
         setUserEmail={setEmail}
         setUserPassword={setPassword}
+        audioBase64={audioBase64}
       />
     );
   }
@@ -55,7 +56,6 @@ function App() {
         <div className="col-lg-12 mb-5 mt-4">
           <Employee
             productos={productosSeleccionados}
-            audioBase64={audioBase64}
             setIsLoggedIn={setIsLoggedIn}
             email={email}
             password={password}

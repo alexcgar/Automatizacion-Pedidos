@@ -6,48 +6,55 @@ import {
   fetchAlbaranesSinFirmar,
   fetchDocumentosSinUbicar,
   fetchLoginUser,
+  authenticate,
 } from "../../Services/apiServices";
-import { getIdMP3 } from "../../Services/Api";
 import { Spinner } from "react-bootstrap";
+import axios from "axios";
 
 const DashBoard = ({ onButtonClick, email, password }) => {
   const [idWarehouse, setIdWarehouse] = useState(null);
   const [albaranesData, setAlbaranesData] = useState([]);
   const [ubicacionesData, setUbicacionesData] = useState([]);
-  const [mp3Ids, setMp3Ids] = useState([]);
-  const [loadingAlbaranes, setLoadingAlbaranes] = useState(true); // loading para albaranes
-  const [loadingUbicaciones, setLoadingUbicaciones] = useState(true); // loading para ubicaciones
-  const [loadingMp3, setLoadingMp3] = useState(true); // loading para mp3
-  const [allDataLoaded, setAllDataLoaded] = useState(false); // Bandera para saber si todos los datos se han cargado
+  const [mp3Ids, setMp3Ids] = useState([]); // Aquí guardamos los datos de la consulta MP3
+  const [loadingAlbaranes, setLoadingAlbaranes] = useState(true);
+  const [loadingUbicaciones, setLoadingUbicaciones] = useState(true);
+  const [loadingMp3, setLoadingMp3] = useState(true);
+  const [allDataLoaded, setAllDataLoaded] = useState(false);
 
-  // Fetch MP3 IDs every 60 seconds
-  useEffect(() => {
-    const fetchMp3Ids = async () => {
-      try {
-        const response = await getIdMP3();
-        if (response && response.data) {
-          setMp3Ids((prev) =>
-            [
-              ...new Set([ ...prev.map((item) => item.correo_id), ...response.data.map((d) => d.correo_id), ]),
-            ].map((id) => {
-              const foundItem = [...prev, ...response.data].find(
-                (obj) => obj.correo_id === id
-              );
-              return foundItem || { correo_id: id, product_count: 0 };
-            })
-          );
+  // Función para obtener los datos del servidor
+  const fetchMp3Data = async () => {
+    try {
+      setLoadingMp3(true);
+      const response = await axios.post(
+        "https://dinasa.wskserver.com:56544/api/audiomp3toordersl/consult",
+        {
+          CodCompany: "1",
+          CodUser: "juani",
+          IDMessage: "",
+          IsAll: false,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${await authenticate()}`,
+            "Content-Type": "application/json",
+          },
         }
-      } catch (error) {
-        console.error("Error fetching MP3 IDs", error);
-      } finally {
-        setLoadingMp3(false); // Termina el loading de mp3
+      );
+
+      if (response.data && response.data.success) {
+        setMp3Ids(response.data.data); // Guarda los resultados de la consulta MP3
+      } else {
+        console.error("Error al obtener los datos del servidor.");
       }
-    };
+    } catch (error) {
+      console.error("Error al conectar con el servidor:", error);
+    } finally {
+      setLoadingMp3(false);
+    }
+  };
 
-    fetchMp3Ids();
-    const intervalId = setInterval(fetchMp3Ids, 60000);
-
-    return () => clearInterval(intervalId);
+  useEffect(() => {
+    fetchMp3Data();
   }, []);
 
   useEffect(() => {
@@ -67,18 +74,17 @@ const DashBoard = ({ onButtonClick, email, password }) => {
     }
   }, [email, password]);
 
-  // Fetch Albaranes Sin Firmar
   useEffect(() => {
     const fetchAlbaranes = async () => {
       if (idWarehouse) {
-        setLoadingAlbaranes(true); // Muestra el loading mientras se cargan los albaranes
+        setLoadingAlbaranes(true);
         try {
           const data = await fetchAlbaranesSinFirmar("1", idWarehouse);
           setAlbaranesData(data);
         } catch (error) {
           console.error("Error fetching albaranes data", error);
         } finally {
-          setLoadingAlbaranes(false); // Termina el loading de albaranes
+          setLoadingAlbaranes(false);
         }
       }
     };
@@ -88,11 +94,10 @@ const DashBoard = ({ onButtonClick, email, password }) => {
     }
   }, [idWarehouse]);
 
-  // Fetch documentos sin ubicar and keep existing data
   useEffect(() => {
     const fetchUbicaciones = async () => {
       if (idWarehouse) {
-        setLoadingUbicaciones(true); // Muestra el loading mientras se cargan las ubicaciones
+        setLoadingUbicaciones(true);
         try {
           const data = await fetchDocumentosSinUbicar(
             "1",
@@ -107,7 +112,7 @@ const DashBoard = ({ onButtonClick, email, password }) => {
         } catch (error) {
           console.error("Error fetching ubicaciones data", error);
         } finally {
-          setLoadingUbicaciones(false); // Termina el loading de ubicaciones
+          setLoadingUbicaciones(false);
         }
       }
     };
@@ -117,10 +122,9 @@ const DashBoard = ({ onButtonClick, email, password }) => {
     }
   }, [idWarehouse]);
 
-  // Verificar si todos los datos están cargados
   useEffect(() => {
     if (!loadingMp3 && !loadingAlbaranes && !loadingUbicaciones) {
-      setAllDataLoaded(true); // Si todos los datos están cargados, cambia la bandera
+      setAllDataLoaded(true);
     }
   }, [loadingMp3, loadingAlbaranes, loadingUbicaciones]);
 
@@ -173,17 +177,18 @@ const DashBoard = ({ onButtonClick, email, password }) => {
                     </thead>
                     <tbody>
                       {mp3Ids.length > 0 ? (
-                        mp3Ids.map((id, index) => (
+                        mp3Ids.map((item, index) => (
                           <tr key={index}>
-                            <td>OT00{index + 1}</td>
-                            <td>Proyecto</td>
-                            <td>Empleado </td>
-                            <td>{id.product_count}</td>
+                            <td>{item.IDWorkOrder}</td>
+                            <td>{item.DesProject || "Proyecto"}</td>
+                            <td>{item.DesEmployee || "Empleado"}</td>
+                            <td>{item.TextTranscription.split(",").length}</td>
                             <td>
                               <button
-                                onClick={() => handleButtonClick(id)}
+                                onClick={() =>
+                                  handleButtonClick(item.IDAudioMP3ToOrderSL)
+                                }
                                 className="btn btn-primary bt"
-                                value={id}
                               >
                                 Ver Detalles
                               </button>

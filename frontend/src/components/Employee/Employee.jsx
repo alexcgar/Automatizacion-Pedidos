@@ -4,19 +4,16 @@ import { Table, Button, Alert, Spinner } from "react-bootstrap";
 import {
   fetchLoginUser,
   generateOrder,
-  generateEntity,
   fetchEmployeeInfo,
 } from "../../Services/apiServices";
 import axios from "axios";
 import "../components_css/Audio.css";
 
-const Employee = ({ productos = [], audioBase64, setIsLoggedIn, email, password }) => {
+const Employee = ({ productos = [], setIsLoggedIn, email, password }) => {
   const [employeeInfo, setEmployeeInfo] = useState(null);
   const [error, setError] = useState(null);
-  const [entityGenerated, setEntityGenerated] = useState(false);
   const [orderGenerated, setOrderGenerated] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [predicciones, setPredicciones] = useState(null);
 
   // Fetch employee info when the component mounts or email changes
   useEffect(() => {
@@ -32,67 +29,7 @@ const Employee = ({ productos = [], audioBase64, setIsLoggedIn, email, password 
     };
     fetchInfo();
   }, [email, password]);
-
-  // Fetch predicciones and generate entity when audioBase64 changes
-  useEffect(() => {
-    if (!audioBase64 || entityGenerated) {
-      return;
-    }
-
-    const fetchPredicciones = async () => {
-      try {
-        const response = await fetch("http://localhost:5000/api/predicciones");
-
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          const responseText = await response.text();
-          console.error("Respuesta inesperada:", responseText);
-          throw new Error("La respuesta no es un JSON válido");
-        }
-
-        const data = await response.json();
-        setPredicciones(data);
-      } catch (error) {
-        setError("Error al obtener las predicciones: " + error.message);
-      }
-    };
-
-    fetchPredicciones();
-  }, [audioBase64, entityGenerated]);
-
-  // Handle generating the entity when the predicciones are available
-  useEffect(() => {
-    if (predicciones && predicciones.length > 0 && !entityGenerated) {
-      const numeroRandon = Math.floor(Math.random() * 1000);
-      const IdMessage = predicciones[0]?.correo_id + numeroRandon;
-      
-      
-
-      const entityData = {
-        CodCompany: "1",
-        IDWorkOrder: "1074241204161431", // datos de mazarrón
-        IDEmployee: "804f63b9-89fe-446e-a2c3-f11bb7be8e27",
-        IDMessage: IdMessage,
-        TextTranscription: predicciones
-          .map((producto) => `${producto.descripcion}${producto.cantidad}`)
-          .join(","),
-        FileMP3: audioBase64,
-      };
-
-      const generateEntityData = async () => {
-        try {
-          const response = await generateEntity(entityData);
-          console.log("Entidad generada exitosamente:", response);
-          setEntityGenerated(true);
-        } catch (error) {
-          console.error("Error al generar la entidad:", error);
-          setError("Error al generar la entidad: " + error.message);
-        }
-      };
-
-      generateEntityData();
-    }
-  }, [predicciones, entityGenerated, audioBase64]);
+ 
 
   const handleGenerateOrder = async () => {
     setIsLoading(true);

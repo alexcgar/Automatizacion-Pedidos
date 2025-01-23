@@ -1,5 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
-
 
 import axios from 'axios';
 
@@ -166,6 +164,7 @@ export const fetchEmployeeInfo = async (codCompany, codUser, idMessage) => { // 
         CodCompany: codCompany,
         CodUser: codUser,
         IDMessage: idMessage,
+        IsAll: false, // Agregar el campo faltante
       },
       {
         headers: {
