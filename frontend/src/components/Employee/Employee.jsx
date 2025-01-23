@@ -165,10 +165,8 @@ const Employee = ({ productos = [], setIsLoggedIn, email, password }) => {
 };
 
 Employee.propTypes = {
-  audioBase64: PropTypes.string.isRequired,
   productos: PropTypes.arrayOf(
     PropTypes.shape({
-      id_article: PropTypes.string.isRequired,
       cantidad: PropTypes.number.isRequired,
     })
   ).isRequired,

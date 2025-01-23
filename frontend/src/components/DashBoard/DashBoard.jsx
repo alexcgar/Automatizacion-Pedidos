@@ -11,7 +11,7 @@ import {
 import { Spinner } from "react-bootstrap";
 import axios from "axios";
 
-const DashBoard = ({ onButtonClick, email, password }) => {
+const DashBoard = ({  email, password, onButtonClick}) => {
   const [idWarehouse, setIdWarehouse] = useState(null);
   const [albaranesData, setAlbaranesData] = useState([]);
   const [ubicacionesData, setUbicacionesData] = useState([]);
@@ -21,7 +21,6 @@ const DashBoard = ({ onButtonClick, email, password }) => {
   const [loadingMp3, setLoadingMp3] = useState(true);
   const [allDataLoaded, setAllDataLoaded] = useState(false);
 
-  // Función para obtener los datos del servidor
   const fetchMp3Data = async () => {
     try {
       setLoadingMp3(true);
@@ -42,7 +41,15 @@ const DashBoard = ({ onButtonClick, email, password }) => {
       );
 
       if (response.data && response.data.success) {
-        setMp3Ids(response.data.data); // Guarda los resultados de la consulta MP3
+        const transformedData = response.data.data.map(item => ({
+          ...item,
+          TextTranscription: item.TextTranscription.startsWith('[') 
+        ? JSON.parse(item.TextTranscription) 
+        : item.TextTranscription
+        }));
+        setMp3Ids(transformedData); // Guarda los resultados de la consulta MP3
+        console.log(transformedData);
+
       } else {
         console.error("Error al obtener los datos del servidor.");
       }
@@ -55,6 +62,8 @@ const DashBoard = ({ onButtonClick, email, password }) => {
 
   useEffect(() => {
     fetchMp3Data();
+    const interval = setInterval(fetchMp3Data, 120000); // Actualiza cada 2 minutos
+    return () => clearInterval(interval); // Limpia el intervalo al desmontar el componente
   }, []);
 
   useEffect(() => {
@@ -91,6 +100,8 @@ const DashBoard = ({ onButtonClick, email, password }) => {
 
     if (idWarehouse) {
       fetchAlbaranes();
+      const interval = setInterval(fetchAlbaranes, 120000); // Actualiza cada 2 minutos
+      return () => clearInterval(interval); // Limpia el intervalo al desmontar el componente
     }
   }, [idWarehouse]);
 
@@ -119,6 +130,8 @@ const DashBoard = ({ onButtonClick, email, password }) => {
 
     if (idWarehouse) {
       fetchUbicaciones();
+      const interval = setInterval(fetchUbicaciones, 120000); // Actualiza cada 2 minutos
+      return () => clearInterval(interval); // Limpia el intervalo al desmontar el componente
     }
   }, [idWarehouse]);
 
@@ -129,8 +142,7 @@ const DashBoard = ({ onButtonClick, email, password }) => {
   }, [loadingMp3, loadingAlbaranes, loadingUbicaciones]);
 
   const handleButtonClick = (id) => {
-    console.log(`ID del botón: ${id}`);
-    onButtonClick();
+    onButtonClick(id);
   };
 
   return (
@@ -158,20 +170,20 @@ const DashBoard = ({ onButtonClick, email, password }) => {
           <div className="row text-center">
             {/* Tabla de Pedidos de Voz Recibidos */}
             <div className="col-xl-4 col-xxl-4">
-              <div className="card border border-3 mt-5">
+              <div className="card flex-fill h-100 border border-2 mt-5">
                 <div className="card-header">
                   <h4 className="card-title mb-0" style={{ color: "#222E3C" }}>
                     Pedidos de Voz Recibidos
                   </h4>
                 </div>
-                <div className="card-body m-1 table-container">
+                <div className="card-body  table-container">
                   <table className="table-flex table-bordered">
                     <thead style={{ backgroundColor: "#222E3C" }}>
                       <tr>
                         <th>Orden de Trabajo</th>
                         <th>Proyecto</th>
                         <th>Empleado</th>
-                        <th>Número de Artículos</th>
+                        <th>Nº Artículos</th>
                         <th>Acción</th>
                       </tr>
                     </thead>
@@ -182,11 +194,11 @@ const DashBoard = ({ onButtonClick, email, password }) => {
                             <td>{item.IDWorkOrder}</td>
                             <td>{item.DesProject || "Proyecto"}</td>
                             <td>{item.DesEmployee || "Empleado"}</td>
-                            <td>{item.TextTranscription.split(",").length}</td>
+                            <td>{item.TextTranscription.length}</td>
                             <td>
                               <button
                                 onClick={() =>
-                                  handleButtonClick(item.IDAudioMP3ToOrderSL)
+                                  handleButtonClick(item.IDMessage)
                                 }
                                 className="btn btn-primary bt"
                               >
@@ -222,7 +234,7 @@ const DashBoard = ({ onButtonClick, email, password }) => {
                     >
                       <tr>
                         <th>Empleado</th>
-                        <th>Número de Albaranes Pendientes</th>
+                        <th>Nº de Albaranes Pendientes</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -253,7 +265,7 @@ const DashBoard = ({ onButtonClick, email, password }) => {
                       style={{ backgroundColor: "#222E3C" }}
                     >
                       <tr>
-                        <th>Número de Albarán</th>
+                        <th>Nº de Albarán</th>
                         <th>Empleado</th>
                         <th>Tipo</th>
                       </tr>
@@ -280,6 +292,7 @@ const DashBoard = ({ onButtonClick, email, password }) => {
 
 DashBoard.propTypes = {
   onButtonClick: PropTypes.func.isRequired,
+  setIdBoton: PropTypes.func.isRequired,
   email: PropTypes.string.isRequired,
   password: PropTypes.string.isRequired,
 };

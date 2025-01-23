@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
-import { fetchCorreos, sendSeleccion } from "../../Services/Api";
+import { sendSeleccion } from "../../Services/Api";
+import { authenticate } from "../../Services/apiServices";
 import "../components_css/Correos.css";
+import axios from "axios";
 
-const Correos = ({ setProductosSeleccionados }) => {
+const Correos = ({ setProductosSeleccionados, idBoton }) => {
     const [productos, setProductos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [busquedas, setBusquedas] = useState({});
@@ -11,18 +13,45 @@ const Correos = ({ setProductosSeleccionados }) => {
     const [isLoadingBusqueda] = useState({});
     const [datosCSV, setDatosCSV] = useState([]);
 
+    
     const obtenerProductos = async () => {
+        console.log(idBoton);
         try {
-            const data = await fetchCorreos();
-            console.log("Datos recibidos desde fetchCorreos:", data);
-            if (Array.isArray(data)) {
-                const productosConCantidadNumerica = data.map((producto) => ({
-                    ...producto,
-                    cantidad: Number(producto.cantidad),
-                }));
-                setProductos(productosConCantidadNumerica);
+            const response = await axios.post(
+                "https://dinasa.wskserver.com:56544/api/audiomp3toordersl/consult",
+                {
+                    CodCompany: "1",
+                    CodUser: "juani",
+                    IDMessage: idBoton,
+                    IsAll: false,
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${await authenticate()}`,
+                        "Content-Type": "application/json",
+                    },
+                }
+            );
+            console.log(response);
+            const result = response.data;
+
+            if (result.success && Array.isArray(result.data)) {
+                const productosProcesados = result.data.map((item) => {
+                    const transcriptionData = JSON.parse(item.TextTranscription);
+                    return transcriptionData.map((transcription) => ({
+                        correo_id: transcription.correo_id,
+                        cantidad: Number(transcription.cantidad),
+                        codigo_prediccion: transcription.codigo_prediccion,
+                        descripcion: transcription.descripcion || "Sin descripción",
+                        descripcion_csv: transcription.descripcion_csv || "",
+                        exactitud: transcription.exactitud || 0,
+                        imagen: transcription.imagen || null,
+                    }));
+                }).flat();
+
+                setProductos(productosProcesados);
             } else {
-                console.error("Los datos recibidos no son un array:", data);
+                console.error("Error en la respuesta de la API:", result);
             }
         } catch (err) {
             console.error("Error al obtener los productos:", err);
@@ -39,10 +68,9 @@ const Correos = ({ setProductosSeleccionados }) => {
             if (data && data.data) {
                 const datosProcesados = data.data.map((item) => ({
                     ...item,
-                    Combined: `${item.CodArticle} - ${item.Description}`, // Combina CodArticle y Description
+                    Combined: `${item.CodArticle} - ${item.Description}`,
                 }));
-                console.log("Datos procesados:", datosProcesados);
-                setDatosCSV(datosProcesados); // Actualiza el estado con los datos procesados
+                setDatosCSV(datosProcesados);
             } else {
                 console.error("Error al cargar el CSV:", data);
             }
@@ -53,16 +81,16 @@ const Correos = ({ setProductosSeleccionados }) => {
 
     useEffect(() => {
         const cargarDatos = async () => {
-            await obtenerProductos(); // Esperar a que las predicciones se carguen
-            await cargarCSV(); // Luego cargar el CSV
+            await obtenerProductos();
+            await cargarCSV();
         };
 
         cargarDatos();
     }, []);
 
     useEffect(() => {
-        // Actualizar el estado en el componente padre solo cuando `productos` cambia
         setProductosSeleccionados(productos);
+        console.log("Productos seleccionados actualizados:", productos);
     }, [productos, setProductosSeleccionados]);
 
     const manejarSeleccionChange = async (
@@ -71,24 +99,20 @@ const Correos = ({ setProductosSeleccionados }) => {
         combinedValue,
         descripcion
     ) => {
-        // Extrae solo la descripción del artículo del valor combinado
         const descripcionArticulo = combinedValue.split(" - ")[1]?.trim() || "";
 
-        // Actualiza productos localmente
         const productosActualizados = productos.map((producto) =>
             producto.codigo_prediccion === codigoPrediccion
                 ? {
-                    ...producto,
-                    codigo_prediccion: selectedOption, // Actualiza el código del artículo
-                    descripcion_csv: descripcionArticulo, // Actualiza la descripción del artículo
-                }
+                      ...producto,
+                      codigo_prediccion: selectedOption,
+                      descripcion_csv: descripcionArticulo,
+                  }
                 : producto
         );
 
-        // Actualiza el estado para reflejar los cambios
         setProductos(productosActualizados);
 
-        // Ejecuta operaciones de fondo si es necesario
         try {
             await sendSeleccion(selectedOption, descripcion);
             setBusquedas((prevState) => ({
@@ -104,7 +128,6 @@ const Correos = ({ setProductosSeleccionados }) => {
         }
     };
 
-    // Nueva función de búsqueda mejorada
     const manejarBuscar = (valorBusqueda, productoId) => {
         if (!valorBusqueda.trim()) {
             setOpcionesBusqueda((prev) => ({
@@ -114,26 +137,19 @@ const Correos = ({ setProductosSeleccionados }) => {
             return;
         }
 
-        // Normaliza la búsqueda eliminando espacios adicionales y convirtiendo a minúsculas
         const busquedaNormalizada = valorBusqueda.trim().toLowerCase();
-
-        // Divide la búsqueda en palabras individuales
         const palabrasBusqueda = busquedaNormalizada.split(" ");
 
-        // Filtrar las opciones del CSV
         const resultados = datosCSV.filter((item) => {
             const textoObjetivo = `${item.CodArticle} ${item.Description}`.toLowerCase();
-
-            // Verifica si todas las palabras de búsqueda están en el texto objetivo
             return palabrasBusqueda.every((palabra) => textoObjetivo.includes(palabra));
         });
 
-        // Actualiza las opciones de búsqueda
         setOpcionesBusqueda((prev) => ({
             ...prev,
             [productoId]:
                 resultados.length > 0
-                    ? resultados.slice(0, 10) // Limitar a las primeras 10 opciones
+                    ? resultados.slice(0, 10)
                     : [{ Combined: "No hay coincidencias", CodArticle: "" }],
         }));
     };
@@ -161,27 +177,13 @@ const Correos = ({ setProductosSeleccionados }) => {
                 <table className="table table-striped table-bordered border border-5">
                     <thead className="thead-dark">
                         <tr>
-                            <th>
-                                <strong>IMAGEN</strong>
-                            </th>
-                            <th>
-                                <strong>DESCRIPCIÓN TRANSCRITA</strong>
-                            </th>
-                            <th>
-                                <strong>PROBABILIDAD (%)</strong>
-                            </th>
-                            <th>
-                                <strong>DESCRIPCIÓN PRODUCTO</strong>
-                            </th>
-                            <th>
-                                <strong>CÓDIGO ARTÍCULO</strong>
-                            </th>
-                            <th>
-                                <strong>BUSCAR PRODUCTO</strong>
-                            </th>
-                            <th>
-                                <strong>CANTIDAD</strong>
-                            </th>
+                            <th>IMAGEN</th>
+                            <th>DESCRIPCIÓN TRANSCRITA</th>
+                            <th>PROBABILIDAD (%)</th>
+                            <th>DESCRIPCIÓN PRODUCTO</th>
+                            <th>CÓDIGO ARTÍCULO</th>
+                            <th>BUSCAR PRODUCTO</th>
+                            <th>CANTIDAD</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -191,8 +193,8 @@ const Correos = ({ setProductosSeleccionados }) => {
                                 exactitud > 60
                                     ? "#a5d6a7"
                                     : exactitud > 40
-                                        ? "#fff59d"
-                                        : "#ef9a9a";
+                                    ? "#fff59d"
+                                    : "#ef9a9a";
 
                             return (
                                 <tr
@@ -234,8 +236,6 @@ const Correos = ({ setProductosSeleccionados }) => {
                                                 }
                                             />
                                             {isLoadingBusqueda[producto.codigo_prediccion] && <div>Cargando...</div>}
-
-                                            {/* Mostrar las opciones de búsqueda si las hay */}
                                             {opcionesBusqueda[producto.codigo_prediccion]?.length > 0 ? (
                                                 <ul className="list-group mt-2 dropdown-list">
                                                     {opcionesBusqueda[producto.codigo_prediccion].map((item) => (
@@ -256,7 +256,6 @@ const Correos = ({ setProductosSeleccionados }) => {
                                                     ))}
                                                 </ul>
                                             ) : (
-                                                // Mostrar el mensaje de "No hay coincidencias" solo si el input no está vacío
                                                 busquedas[producto.codigo_prediccion]?.trim() && (
                                                     <div className="mt-2">No hay coincidencias</div>
                                                 )
@@ -296,6 +295,7 @@ const Correos = ({ setProductosSeleccionados }) => {
 
 Correos.propTypes = {
     setProductosSeleccionados: PropTypes.func.isRequired,
+    idBoton: PropTypes.string.isRequired,
 };
 
 export default Correos;

@@ -17,11 +17,18 @@ function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showDashboard, setShowDashboard] = useState(true);
+  const [idBoton, setIdBoton] = useState(null);
 
   const handleLogin = (isLoggedIn) => {
     setIsLoggedIn(isLoggedIn);
     setShowDashboard(true);
   };
+
+  const handleButtonClick = (id) => {
+    setIdBoton(id);
+    setShowDashboard(false);
+  };
+
 
   if (!isLoggedIn) {
     return (
@@ -34,10 +41,11 @@ function App() {
     );
   }
 
-  if (showDashboard && isLoggedIn) {
+  if (showDashboard) {
     return (
       <DashBoard
-        onButtonClick={() => setShowDashboard(false)}
+        setIdBoton={setIdBoton}
+        onButtonClick={handleButtonClick}
         email={email}
         password={password}
       />
@@ -48,7 +56,7 @@ function App() {
     <div className="container-fluid d-flex flex-column min-vh-100 ">
       <div className="row">
         <div className="col-12 mb-5 mt-2">
-          <Navbar setisLoggedin={setIsLoggedIn} />{" "}
+          <Navbar setisLoggedin={setIsLoggedIn}  />{" "}
         </div>
       </div>
 
@@ -62,7 +70,7 @@ function App() {
           />
         </div>
         <div className="col-12">
-          <Correos setProductosSeleccionados={setProductosSeleccionados} />
+          <Correos setProductosSeleccionados={setProductosSeleccionados} idBoton={idBoton} />
         </div>
       </div>
       <div className="row ">

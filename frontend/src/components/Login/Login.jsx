@@ -77,21 +77,21 @@ const Login = ({ setIsLoggedIn, setUserEmail, setUserPassword }) => {
         }
 
         const predicciones = await response.json();
-
         if (predicciones && predicciones.length > 0 && audioUrl) {
           const IdMessage = predicciones[0]?.correo_id;
 
-          const entityData = {
+          // Filtrar las predicciones que coincidan con el IDMessage
+          const filteredPredicciones = predicciones.filter(prediccion => prediccion.correo_id === IdMessage);
+
+          const entityData = JSON.stringify({
             CodCompany: "1",
             IDWorkOrder: "1074241204161431", // Datos de ejemplo
             IDEmployee: "804f63b9-89fe-446e-a2c3-f11bb7be8e27", // ID de empleado
-            IDMessage: IdMessage,
-            TextTranscription: predicciones
-              .map((producto) => `${producto.descripcion}${producto.cantidad}`)
-              .join(","),
+            IDMessage: IdMessage, // ID de mensaje
+            TextTranscription: JSON.stringify(filteredPredicciones),
             FileMP3: audioBase64,
-          };
-          // console.log("Generando entidad:", entityData);
+          });
+
           try {
             const entityResponse = await generateEntity(entityData);
             console.log("Entidad generada exitosamente:", entityResponse);
