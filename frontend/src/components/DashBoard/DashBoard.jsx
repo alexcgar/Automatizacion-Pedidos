@@ -7,11 +7,12 @@ import {
   fetchDocumentosSinUbicar,
   fetchLoginUser,
   authenticate,
+  generateEntity,
 } from "../../Services/apiServices";
 import { Spinner } from "react-bootstrap";
 import axios from "axios";
 
-const DashBoard = ({  email, password, onButtonClick}) => {
+const DashBoard = ({ email, password, onButtonClick }) => {
   const [idWarehouse, setIdWarehouse] = useState(null);
   const [albaranesData, setAlbaranesData] = useState([]);
   const [ubicacionesData, setUbicacionesData] = useState([]);
@@ -20,6 +21,7 @@ const DashBoard = ({  email, password, onButtonClick}) => {
   const [loadingUbicaciones, setLoadingUbicaciones] = useState(true);
   const [loadingMp3, setLoadingMp3] = useState(true);
   const [allDataLoaded, setAllDataLoaded] = useState(false);
+  const [error, setError] = useState("");
 
   const fetchMp3Data = async () => {
     try {
@@ -43,15 +45,17 @@ const DashBoard = ({  email, password, onButtonClick}) => {
       if (response.data && response.data.success) {
         const transformedData = response.data.data.map(item => ({
           ...item,
-          TextTranscription: item.TextTranscription.startsWith('[') 
-        ? JSON.parse(item.TextTranscription) 
+          TextTranscription: item.TextTranscription.startsWith('[')
+        ? JSON.parse(item.TextTranscription)
         : item.TextTranscription
         }));
         setMp3Ids(transformedData); // Guarda los resultados de la consulta MP3
         console.log(transformedData);
 
       } else {
+        if(error){
         console.error("Error al obtener los datos del servidor.");
+        }
       }
     } catch (error) {
       console.error("Error al conectar con el servidor:", error);
@@ -145,6 +149,52 @@ const DashBoard = ({  email, password, onButtonClick}) => {
     onButtonClick(id);
   };
 
+  const fetchPrediccionesAndGenerateEntity = async () => {
+    try {
+      const response = await fetch("http://localhost:5000/api/predicciones");
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const responseText = await response.text();
+        console.error("Respuesta inesperada:", responseText);
+        throw new Error("La respuesta no es un JSON válido");
+      }
+
+      const predicciones = await response.json();
+      if (predicciones && predicciones.length > 0) {
+        const IdMessage = predicciones[0]?.correo_id;
+
+        // Filtrar las predicciones que coincidan con el IDMessage
+        const filteredPredicciones = predicciones.filter(prediccion => prediccion.correo_id === IdMessage);
+
+        const entityData = JSON.stringify({
+          CodCompany: "1",
+          IDWorkOrder: "1074241204161431", // Datos de ejemplo
+          IDEmployee: "804f63b9-89fe-446e-a2c3-f11bb7be8e27", // ID de empleado
+          IDMessage: IdMessage, // ID de mensaje
+          TextTranscription: JSON.stringify(filteredPredicciones),
+          FileMP3: "base64String", // Aquí deberías poner el audio en base64
+        });
+
+        try {
+          const entityResponse = await generateEntity(entityData);
+          console.log("Entidad generada exitosamente:", entityResponse);
+        } catch (error) {
+          console.error("Error al generar la entidad:", error);
+          setError("Error al generar la entidad: " + error.message);
+        }
+      }
+    } catch (error) {
+      setError("Error al obtener las predicciones: " + error.message);
+    }
+  };
+
+  useEffect(() => {
+    fetchPrediccionesAndGenerateEntity();
+    const interval = setInterval(fetchPrediccionesAndGenerateEntity, 120000); // Actualiza cada 2 minutos
+    return () => clearInterval(interval); // Limpia el intervalo al desmontar el componente
+  }, []);
+
   return (
     <div>
       <div className="row container-fluid mb-6">
@@ -183,7 +233,7 @@ const DashBoard = ({  email, password, onButtonClick}) => {
                         <th>Orden de Trabajo</th>
                         <th>Proyecto</th>
                         <th>Empleado</th>
-                        <th>Nº Artículos</th>
+                        <th>Artículos</th>
                         <th>Acción</th>
                       </tr>
                     </thead>
@@ -292,7 +342,6 @@ const DashBoard = ({  email, password, onButtonClick}) => {
 
 DashBoard.propTypes = {
   onButtonClick: PropTypes.func.isRequired,
-  setIdBoton: PropTypes.func.isRequired,
   email: PropTypes.string.isRequired,
   password: PropTypes.string.isRequired,
 };

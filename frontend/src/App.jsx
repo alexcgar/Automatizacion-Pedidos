@@ -67,6 +67,7 @@ function App() {
             setIsLoggedIn={setIsLoggedIn}
             email={email}
             password={password}
+            idBoton={idBoton}
           />
         </div>
         <div className="col-12">

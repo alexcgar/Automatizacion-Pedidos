@@ -13,7 +13,7 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
     const [isLoadingBusqueda] = useState({});
     const [datosCSV, setDatosCSV] = useState([]);
 
-    
+
     const obtenerProductos = async () => {
         console.log(idBoton);
         try {
@@ -44,6 +44,7 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
                         codigo_prediccion: transcription.codigo_prediccion,
                         descripcion: transcription.descripcion || "Sin descripción",
                         descripcion_csv: transcription.descripcion_csv || "",
+                        id_article: transcription.id_article,
                         exactitud: transcription.exactitud || 0,
                         imagen: transcription.imagen || null,
                     }));

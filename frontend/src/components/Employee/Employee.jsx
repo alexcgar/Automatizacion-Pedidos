@@ -1,27 +1,26 @@
-import { useEffect, useState } from "react";
+import{ useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { Table, Button, Alert, Spinner } from "react-bootstrap";
 import {
   fetchLoginUser,
   generateOrder,
-  fetchEmployeeInfo,
+  authenticate,
 } from "../../Services/apiServices";
 import axios from "axios";
 import "../components_css/Audio.css";
 
-const Employee = ({ productos = [], setIsLoggedIn, email, password }) => {
+const Employee = ({ productos = [], setIsLoggedIn, email, password, idBoton }) => {
   const [employeeInfo, setEmployeeInfo] = useState(null);
   const [error, setError] = useState(null);
   const [orderGenerated, setOrderGenerated] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [entityData, setEntityData] = useState(null);
 
   // Fetch employee info when the component mounts or email changes
   useEffect(() => {
     const fetchInfo = async () => {
       try {
-        const data = await fetchLoginUser("1", email, password);  //Consult employee entity information using email and password as parameters
-        console.log(email);
-        console.log(password);
+        const data = await fetchLoginUser("1", email, password);
         setEmployeeInfo(data);
       } catch (error) {
         setError(error.message);
@@ -29,7 +28,48 @@ const Employee = ({ productos = [], setIsLoggedIn, email, password }) => {
     };
     fetchInfo();
   }, [email, password]);
- 
+
+  // Fetch entity data using idBoton
+  useEffect(() => {
+    const fetchEntityData = async () => {
+      try {
+        const response = await axios.post(
+          "https://dinasa.wskserver.com:56544/api/audiomp3toordersl/consult",
+          {
+            CodCompany: "1",
+            CodUser: "juani",
+            IDMessage: idBoton,
+            IsAll: false,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${await authenticate()}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (response.data && response.data.success) {
+          const transformedData = response.data.data.map(item => ({
+            ...item,
+            TextTranscription: item.TextTranscription.startsWith('[')
+              ? JSON.parse(item.TextTranscription)
+              : item.TextTranscription
+          }));
+          setEntityData(transformedData);
+        } else {
+          console.error("Error al obtener los datos del servidor.");
+        }
+      } catch (error) {
+        console.error("Error al conectar con el servidor:", error);
+        setError("Error al obtener los datos del servidor: " + error.message);
+      }
+    };
+
+    if (idBoton) {
+      fetchEntityData();
+    }
+  }, [idBoton]);
 
   const handleGenerateOrder = async () => {
     setIsLoading(true);
@@ -40,17 +80,16 @@ const Employee = ({ productos = [], setIsLoggedIn, email, password }) => {
         return;
       }
 
-      // Fetch predicciones again to make sure we have the latest ones
-      const response = await fetch("http://localhost:5000/api/predicciones");
-      const predicciones = await response.json();
-      console.log("Predicciones:", predicciones);
+      if (!entityData) {
+        console.error("No hay datos de la entidad.");
+        setIsLoading(false);
+        return;
+      }
 
-    const entityInfo = await fetchEmployeeInfo("1", "","");
-    const IDAudioMP3ToOrderSL = entityInfo[0].IDAudioMP3ToOrderSL;
       const orderData = {
         CodCompany: "1",
-        IDAudioMP3ToOrderSL,
-        TextPrediction: predicciones
+        IDAudioMP3ToOrderSL: entityData[0].IDAudioMP3ToOrderSL,
+        TextPrediction: entityData[0].TextTranscription
           .map(
             (prediccion) =>
               `${prediccion.codigo_prediccion}-${prediccion.descripcion}`
@@ -71,7 +110,7 @@ const Employee = ({ productos = [], setIsLoggedIn, email, password }) => {
         console.log("Pedido generado exitosamente:", orderResponse);
         setOrderGenerated(orderResponse);
 
-        const correoId = predicciones[0]?.correo_id;
+        const correoId = entityData[0].TextTranscription[0]?.correo_id;
         if (correoId) {
           await axios.post("http://localhost:5000/api/marcar_leido", {
             correo_id: correoId,
@@ -117,13 +156,13 @@ const Employee = ({ productos = [], setIsLoggedIn, email, password }) => {
           <tbody>
             <tr>
               <td>
-                <strong>{employeeInfo.CodEmployee} </strong>
+                <strong>VALERA AZNAR JUANA</strong>
               </td>
               <td>
-                <strong>{employeeInfo.CodWorkOrder} </strong>
+                <strong>1074241204161431 </strong>
               </td>
               <td>
-                <strong>{employeeInfo.CodCustomer} </strong>
+                <strong>ALMONDPLUS CINCO SL </strong>
               </td>
               <td><strong>{employeeInfo.DesSite}</strong></td>
               <td>
@@ -138,7 +177,7 @@ const Employee = ({ productos = [], setIsLoggedIn, email, password }) => {
       )}
       {orderGenerated && (
         <Alert variant="success" className="text-center">
-          <strong>Pedido generado correctamente:</strong>
+          <strong>Pedido generado correctamente.</strong>
           <br />
           <strong>Código de Pedido:</strong> {orderGenerated.data.CodOrder}
           <br />
@@ -173,6 +212,7 @@ Employee.propTypes = {
   setIsLoggedIn: PropTypes.func.isRequired,
   email: PropTypes.string.isRequired,
   password: PropTypes.string.isRequired,
+  idBoton: PropTypes.string.isRequired,
 };
 
 export default Employee;
