@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import { sendSeleccion } from "../../Services/Api";
@@ -5,7 +6,7 @@ import { authenticate } from "../../Services/apiServices";
 import "../components_css/Correos.css";
 import axios from "axios";
 
-const Correos = ({ setProductosSeleccionados, idBoton }) => {
+const Correos = ({ setProductosSeleccionados, idBoton}) => {
     const [productos, setProductos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [busquedas, setBusquedas] = useState({});

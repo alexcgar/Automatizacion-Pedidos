@@ -10,7 +10,6 @@
     font-size: 16px;
     font-weight: 200;
     color: #fff;
-    padding: 10;   
 }
 
 .table-flex td {
@@ -22,14 +21,12 @@
 }
 
 .card-body {
+    flex: 1;
     display: flex;
-    justify-content: center;
-    margin: 0;
-    padding: 0;
-}
+    flex-direction: column;
+  }
 
 .table-container {
     max-height: calc(100vh - 230px); /* Ajusta el valor según lo necesites */
     overflow-y: auto;
-    margin-top: 10px;
 }

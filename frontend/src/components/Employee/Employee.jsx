@@ -1,33 +1,22 @@
-import{ useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { Table, Button, Alert, Spinner } from "react-bootstrap";
 import {
-  fetchLoginUser,
   generateOrder,
   authenticate,
 } from "../../Services/apiServices";
 import axios from "axios";
 import "../components_css/Audio.css";
 
-const Employee = ({ productos = [], setIsLoggedIn, email, password, idBoton }) => {
+const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
   const [employeeInfo, setEmployeeInfo] = useState(null);
   const [error, setError] = useState(null);
   const [orderGenerated, setOrderGenerated] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [entityData, setEntityData] = useState(null);
 
-  // Fetch employee info when the component mounts or email changes
-  useEffect(() => {
-    const fetchInfo = async () => {
-      try {
-        const data = await fetchLoginUser("1", email, password);
-        setEmployeeInfo(data);
-      } catch (error) {
-        setError(error.message);
-      }
-    };
-    fetchInfo();
-  }, [email, password]);
+  
+ 
 
   // Fetch entity data using idBoton
   useEffect(() => {
@@ -57,6 +46,7 @@ const Employee = ({ productos = [], setIsLoggedIn, email, password, idBoton }) =
               : item.TextTranscription
           }));
           setEntityData(transformedData);
+          setEmployeeInfo(transformedData[0]);
         } else {
           console.error("Error al obtener los datos del servidor.");
         }
@@ -91,14 +81,14 @@ const Employee = ({ productos = [], setIsLoggedIn, email, password, idBoton }) =
         IDAudioMP3ToOrderSL: entityData[0].IDAudioMP3ToOrderSL,
         TextPrediction: entityData[0].TextTranscription
           .map(
-            (prediccion) =>
-              `${prediccion.codigo_prediccion}-${prediccion.descripcion}`
+            (prediction) =>
+              `${prediction.codigo_prediccion}-${prediction.descripcion}`
           )
           .join(","),
         Lines: productos
           .filter((producto) => producto.cantidad > 0)
-          .map((producto) => ({
-            IDArticle: producto.id_article,
+          .map((producto, index) => ({
+            IDArticle: entityData[0].TextTranscription[index].id_article,
             Quantity: producto.cantidad,
           })),
       };
@@ -156,15 +146,15 @@ const Employee = ({ productos = [], setIsLoggedIn, email, password, idBoton }) =
           <tbody>
             <tr>
               <td>
-                <strong>VALERA AZNAR JUANA</strong>
+                <strong>{employeeInfo.DesEmployee}</strong>
               </td>
               <td>
-                <strong>1074241204161431 </strong>
+                <strong>{employeeInfo.IDWorkOrder}</strong>
               </td>
               <td>
                 <strong>ALMONDPLUS CINCO SL </strong>
               </td>
-              <td><strong>{employeeInfo.DesSite}</strong></td>
+              <td><strong>{employeeInfo.DesCustomerDeliveryAddress}</strong></td>
               <td>
                 <strong>{employeeInfo.CodProject} {employeeInfo.VersionProject}{" "}
                 {employeeInfo.DesProject}</strong>

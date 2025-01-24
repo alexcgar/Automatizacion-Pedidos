@@ -29,6 +29,9 @@ function App() {
     setShowDashboard(false);
   };
 
+  const handleNavigateToDashboard = () => {
+    setShowDashboard(true);
+  };
 
   if (!isLoggedIn) {
     return (
@@ -48,19 +51,25 @@ function App() {
         onButtonClick={handleButtonClick}
         email={email}
         password={password}
+        setIsLoggedIn={setIsLoggedIn}
+        isDashboardVisible={true} // Pasar la prop adicional
       />
     );
   }
 
   return (
-    <div className="container-fluid d-flex flex-column min-vh-100 ">
+    <div className="container-fluid d-flex flex-column min-vh-100">
       <div className="row">
         <div className="col-12 mb-5 mt-2">
-          <Navbar setisLoggedin={setIsLoggedIn}  />{" "}
+          <Navbar
+            setIsLoggedIn={setIsLoggedIn}
+            onNavigateToDashboard={handleNavigateToDashboard}
+            isDashboardVisible={showDashboard} // Pasar la prop adicional
+          />
         </div>
       </div>
 
-      <div className="row  justify-content-center flex-grow-1 p-3">
+      <div className="row justify-content-center flex-grow-1 p-3">
         <div className="col-lg-12 mb-5 mt-4">
           <Employee
             productos={productosSeleccionados}
@@ -74,9 +83,9 @@ function App() {
           <Correos setProductosSeleccionados={setProductosSeleccionados} idBoton={idBoton} />
         </div>
       </div>
-      <div className="row ">
-        <div className="col-12 p-4 ">
-          <AudioRecorder setAudioBase64={setAudioBase64} />{" "}
+      <div className="row">
+        <div className="col-12 p-4">
+          <AudioRecorder setAudioBase64={setAudioBase64} />
         </div>
       </div>
       <div className="row mt-auto">
