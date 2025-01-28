@@ -272,9 +272,8 @@ def cargar_datos(ruta_csv: str):
 
     y = df_local["CodArticle"].tolist()
 
-    images = df_local["Image"].tolist()
 
-    return X, y, df_local, images
+    return X, y, df_local
 
 
 def entrenar_modelo(X_train: List[str], y_train: List[str]):
@@ -305,16 +304,16 @@ def modelo_predecir(descripcion: str) -> str:
     return prediccion[0]
 
 
-def procesar_imagen(image_data):
+# def procesar_imagen(image_data):
 
-    if image_data.startswith("b'") and image_data.endswith("'"):
-        image_data = image_data[2:-1]
+#     if image_data.startswith("b'") and image_data.endswith("'"):
+#         image_data = image_data[2:-1]
 
-    image_bytes = image_data.encode("utf-8").decode("unicode_escape").encode("latin1")
+#     image_bytes = image_data.encode("utf-8").decode("unicode_escape").encode("latin1")
 
-    base64_encoded = base64.b64encode(image_bytes).decode("utf-8")
+#     base64_encoded = base64.b64encode(image_bytes).decode("utf-8")
 
-    return base64_encoded
+#     return base64_encoded
 
 
 def actualizar_modelo(descripcion: str, seleccion: str):
@@ -364,13 +363,13 @@ def backup_model(ruta_original: str, ruta_backup_dir: str):
 
 
 def inicializar_modelo():
-    global model, vectorizer, todas_las_clases, df, descripciones_confirmadas, images
+    global model, vectorizer, todas_las_clases, df, descripciones_confirmadas
 
     # Cargar el modelo y vectorizador desde archivo si existe
     model, vectorizer = cargar_modelo(RUTA_MODELO)
 
     # Cargar los datos desde el CSV
-    X, y, df_local, images = cargar_datos(RUTA_CSV)
+    X, y, df_local = cargar_datos(RUTA_CSV)
 
     # Inicializamos las clases
     todas_las_clases = sorted(list(set(y)))
@@ -397,7 +396,7 @@ CORS(app)
 @app.route("/api/cargar_csv", methods=["GET"])
 def cargar_csv():
     try:
-        df = pd.read_csv(RUTA_CSV, usecols=["CodArticle", "Description"]) 
+        df = pd.read_csv(RUTA_CSV, usecols=["CodArticle", "Description"], nrows=35000) 
         datos_csv = df.to_dict(orient="records")
         return jsonify({"data": datos_csv}), 200
         
@@ -497,8 +496,7 @@ def actualizar_predicciones_periodicamente():
                     else "Descripción no encontrada"
                 )
                 
-                imagen = df[df["CodArticle"] == codigo_prediccion]["Image"].values
-                imagen = (imagen[0] if len(imagen) > 0 and pd.notna(imagen[0]) else None)
+                
                 id_article = df[df["CodArticle"] == codigo_prediccion]["IDArticle"].values
                 id_article = id_article[0] if len(id_article) > 0 else None
 
@@ -508,7 +506,7 @@ def actualizar_predicciones_periodicamente():
                         "codigo_prediccion": codigo_prediccion,
                         "descripcion_csv": descripcion_csv,
                         "cantidad": cantidad,
-                        "imagen": procesar_imagen(imagen) if imagen else None,
+                        "imagen": "",
                         "exactitud": exactitud,
                         "id_article": id_article,
                         "correo_id": correo_id,
@@ -632,4 +630,3 @@ if __name__ == "__main__":
         target=actualizar_predicciones_periodicamente, daemon=True)
     hilo_actualizador.start()
     app.run(host="0.0.0.0", port=5000, debug=True)
- 

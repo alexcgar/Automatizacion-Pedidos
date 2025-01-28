@@ -60,8 +60,6 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
             : item.TextTranscription
         }));
         setMp3Ids(transformedData); // Guarda los resultados de la consulta MP3
-        console.log(transformedData);
-
       } else {
         if (error) {
           console.error("Error al obtener los datos del servidor.");
@@ -150,7 +148,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
   useEffect(() => {
     if (idWarehouse) {
       fetchUbicaciones();
-      const interval = setInterval(fetchUbicaciones, 120000); // Actualiza cada 2 minutos
+      const interval = setInterval(fetchUbicaciones, 60000); // Actualiza cada 2 minutos
       return () => clearInterval(interval); // Limpia el intervalo al desmontar el componente
     }
   }, [idWarehouse]);
@@ -186,7 +184,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
         const entityData = JSON.stringify({
           CodCompany: "1",
           IDWorkOrder: "1074241204161431", // Datos de ejemplo
-          IDEmployee: "0222", // ID de empleado
+          IDEmployee: email, // ID de empleado
           IDMessage: IdMessage, // ID de mensaje
           TextTranscription: JSON.stringify(filteredPredicciones),
           FileMP3: "base64String", // Aquí deberías poner el audio en base64
@@ -207,7 +205,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
 
   useEffect(() => {
     fetchPrediccionesAndGenerateEntity();
-    const interval = setInterval(fetchPrediccionesAndGenerateEntity, 120000); // Actualiza cada 2 minutos
+    const interval = setInterval(fetchPrediccionesAndGenerateEntity, 30000); // Actualiza cada 30 segundos
     return () => clearInterval(interval); // Limpia el intervalo al desmontar el componente
   }, []);
 
@@ -262,7 +260,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
                         mp3Ids.map((item, index) => (
                           <tr key={index} className="text-center">
                             <td>{item.IDWorkOrder}</td>
-                            <td>{item.DesProject || "Proyecto"}</td>
+                            <td>{item.DesProject || ""}</td>
                             <td>{capitalizeFirstLetter(item.DesEmployee) || "Empleado"}</td>
                             <td>{item.TextTranscription.length}</td>
                             <td className=" justify-content-center">
@@ -337,7 +335,8 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
                       <tr>
                         <th>Nº de Albarán</th>
                         <th>Empleado</th>
-                        <th>Tipo</th>
+                        <th>Fecha</th>
+                        <th>Nº Articulos</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -345,7 +344,8 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
                         <tr key={index}>
                           <td>{item.Item}</td>
                           <td>{item.Description}</td>
-                          <td>{item.GeneratedFromString}</td>
+                          <td>{item.DateString}</td>
+                          <td>{item.NArticles}</td>
                         </tr>
                       ))}
                     </tbody>

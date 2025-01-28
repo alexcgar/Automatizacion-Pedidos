@@ -52,11 +52,12 @@ const Login = ({ setIsLoggedIn, setUserEmail, setUserPassword }) => {
         }
       } catch (error) {
         console.error("Error al obtener el audio:", error);
-        setError("Error al obtener el audio. Por favor, inténtelo de nuevo.");
       }
     };
 
-    handleObtenerAudio();
+    const intervalId = setInterval(handleObtenerAudio, 10000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   // Generar entidad cuando el audioBase64 esté disponible
@@ -67,48 +68,49 @@ const Login = ({ setIsLoggedIn, setUserEmail, setUserPassword }) => {
 
     const fetchPrediccionesAndGenerateEntity = async () => {
       try {
-        const response = await fetch("http://localhost:5000/api/predicciones");
+      const response = await fetch("http://localhost:5000/api/predicciones");
 
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          const responseText = await response.text();
-          console.error("Respuesta inesperada:", responseText);
-          throw new Error("La respuesta no es un JSON válido");
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const responseText = await response.text();
+        console.error("Respuesta inesperada:", responseText);
+        throw new Error("La respuesta no es un JSON válido");
+      }
+
+      const predicciones = await response.json();
+      if (predicciones && predicciones.length > 0 && audioUrl) {
+        const IdMessage = predicciones[0]?.correo_id;
+
+        // Filtrar las predicciones que coincidan con el IDMessage
+        const filteredPredicciones = predicciones.filter(prediccion => prediccion.correo_id === IdMessage);
+
+        const entityData = JSON.stringify({
+        CodCompany: "1",
+        IDWorkOrder: "1074241204161431", // Datos de ejemplo
+        IDEmployee: "0222", // ID de empleado
+        IDMessage: IdMessage, // ID de mensaje
+        TextTranscription: JSON.stringify(filteredPredicciones),
+        FileMP3: audioBase64,
+        });
+
+        try {
+        const entityResponse = await generateEntity(entityData);
+        console.log("Entidad generada exitosamente:", entityResponse);
+        setEntityGenerated(true);
+        } catch (error) {
+        console.error("Error al generar la entidad:", error);
+        setError("Error al generar la entidad: " + error.message);
         }
-
-        const predicciones = await response.json();
-        if (predicciones && predicciones.length > 0 && audioUrl) {
-          const IdMessage = predicciones[0]?.correo_id;
-
-          // Filtrar las predicciones que coincidan con el IDMessage
-          const filteredPredicciones = predicciones.filter(prediccion => prediccion.correo_id === IdMessage);
-
-            const entityData = JSON.stringify({
-            CodCompany: "1",
-            IDWorkOrder: "1074241204161431", // Datos de ejemplo
-            IDEmployee: "0222", // ID de empleado
-            IDMessage: IdMessage, // ID de mensaje
-            TextTranscription: JSON.stringify(filteredPredicciones),
-            FileMP3: audioBase64,
-            });
-
-          try {
-            const entityResponse = await generateEntity(entityData);
-            console.log(entityData);
-            console.log("Entidad generada exitosamente:", entityResponse);
-            setEntityGenerated(true);
-          } catch (error) {
-            console.error("Error al generar la entidad:", error);
-            setError("Error al generar la entidad: " + error.message);
-          }
-        }
+      }
       } catch (error) {
-        setError("Error al obtener las predicciones: " + error.message);
+      setError("Error al obtener las predicciones: " + error.message);
       }
     };
 
-    fetchPrediccionesAndGenerateEntity();
-  }, [audioBase64, audioUrl, entityGenerated]);
+    const intervalId = setInterval(fetchPrediccionesAndGenerateEntity, 30000);
+
+    return () => clearInterval(intervalId);
+    }, [audioBase64, audioUrl, entityGenerated]);
 
   const handleLogin = async () => {
     try {

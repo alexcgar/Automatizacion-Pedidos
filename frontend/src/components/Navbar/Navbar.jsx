@@ -19,7 +19,7 @@ const NavBar = ({ setIsLoggedIn, onNavigateToDashboard, isDashboardVisible }) =>
           <Navbar.Collapse id="navbarNav">
             <Nav className="ms-auto me-1 gap-3">
               <Nav.Link as="button" onClick={onNavigateToDashboard} className="nav-link-button border">
-                {isDashboardVisible ? "Refrescar" : "Volver al Inicio"}
+                {isDashboardVisible ? "REFRESCAR" : "VOLVER AL INICIO"}
               </Nav.Link>
               <Nav.Link as="button" onClick={handleLogout} className="nav-link-button border">
                 LOG OUT
