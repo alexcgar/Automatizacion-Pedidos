@@ -5,6 +5,10 @@ import logo from "../../assets/logo-blanco-novagric-200x146.png"; // Importa la 
 
 const NavBar = ({ setIsLoggedIn, onNavigateToDashboard, isDashboardVisible }) => {
   const handleLogout = () => {
+    // Eliminar las credenciales de localStorage
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("userPassword");
+    // Actualizar el estado de inicio de sesión
     setIsLoggedIn(false);
   };
 

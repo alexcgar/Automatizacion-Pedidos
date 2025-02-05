@@ -110,7 +110,7 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
 
         setTimeout(() => {
           setIsLoggedIn(false);
-        }, 988000);
+        }, 10000);
       } catch (error) {
         console.error("Error al generar el pedido:", error);
         setError("Error al generar el pedido: " + error.message);

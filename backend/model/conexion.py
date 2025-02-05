@@ -23,13 +23,12 @@ def Query():
     if conn is not None:
         cur = conn.cursor()
         sql = """
-        select top 35000 CodArticle, Description, IDArticle
+        select  CodArticle, Description, IDArticle
         FROM [RPSNovedades2015].[dbo].[STKArticle]
         WHERE InactiveDate is null  AND CodCompany = '1'
         ORDER BY CodArticle;
         """
         
-
         cur.execute(sql)
 
         filas = cur.fetchall()
@@ -38,10 +37,15 @@ def Query():
         cur.close()
         conn.close()
 
+        
+        df = pd.DataFrame.from_records(filas, columns=column_names)
+        df.to_parquet("backend/model/consulta_resultado.parquet", index=False)
+        print("Data saved to consulta_resultado.parquet")
+        
         df = pd.DataFrame.from_records(filas, columns=column_names)
         df.to_csv("backend/model/consulta_resultado.csv", index=False)
         print("Data saved to consulta_resultado.csv")
-
+        
         return df
     else:
         return None

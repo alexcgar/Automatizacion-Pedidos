@@ -27,6 +27,9 @@ from typing import List
 from sklearn.linear_model import SGDClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.utils.class_weight import compute_sample_weight
+
+
 
 load_dotenv()
 
@@ -40,7 +43,8 @@ SCOPES = ["https://graph.microsoft.com/.default"]
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Obtiene la ruta absoluta del archivo actual
 RUTA_MODELO = os.path.join(BASE_DIR, "modelo_actualizado.joblib")
-RUTA_CSV = os.path.join(BASE_DIR, "consulta_resultado.csv")
+RUTA_CSV = os.path.join(BASE_DIR, "consulta_resultado_clean.csv")
+RUTA_CSV_CLEAN = os.path.join(BASE_DIR, "consulta_resultado.csv")
 RUTA_DESC_CONFIRMADAS_PKL = os.path.join(BASE_DIR, "descripciones_confirmadas.joblib")
 RUTA_DESC_CONFIRMADAS_JSON = os.path.join(BASE_DIR, "descripciones_confirmadas.json")
 CARPETA_AUDIOS = os.path.join(BASE_DIR, "audios")
@@ -152,7 +156,7 @@ def extract_body_message(cuerpo, correo_id):
         if "items" in mensaje_json:
             descriptions = []
             for item in mensaje_json["items"]:
-                producto = item.get("product", "")
+                producto = item.get("product", "").replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
                 size = item.get("size", "")
                 if size == "N/A":
                     size = ""
@@ -191,8 +195,7 @@ def descargar_audio_desde_correo(carpeta_destino):
                 if nombre_archivo.lower().endswith(".mp3"):
                     attachment_id = attachment.get("id")
                     # Descargar el adjunto
-                    adjunto_endpoint = f'https://graph.microsoft.com/v1.0/users/{
-                        USER_EMAIL}/messages/{message["id"]}/attachments/{attachment_id}/$value'
+                    adjunto_endpoint = f'https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/messages/{message["id"]}/attachments/{attachment_id}/$value'
                     adjunto_response = requests.get(adjunto_endpoint, headers=headers)
                     if adjunto_response.status_code == 200:
                         # Asegurarse de que la carpeta de destino exista
@@ -229,8 +232,11 @@ def procesar_texto(texto: str) -> str:
     texto = texto.lower()
     texto = re.sub(r"[^\w\s]", "", texto, flags=re.UNICODE)
     texto = re.sub(r"\b(\w+)(es|s)\b", r"\1", texto)
+    texto = re.sub(r"\bkilos\b", "kg", texto)  # Transformar "kilos" en "kg"
     palabras = texto.split()
     texto_procesado = " ".join([palabra for palabra in palabras if palabra not in STOP_WORDS])
+    # Corrección específica para "superiores" a "superior"
+    texto_procesado = texto_procesado.replace("superiore", "superior")
     return texto_procesado
 
 
@@ -286,7 +292,7 @@ def entrenar_modelo(X_train: List[str], y_train: List[str]):
 
     clases = sorted(list(set(y_train)))
 
-    modelo_sgd.partial_fit(X_train_tfidf, y_train, classes=clases)
+    model.partial_fit(X_train_tfidf, y_train, sample_weight=sample_weights)
 
     return modelo_sgd, vectorizador
 
@@ -363,13 +369,14 @@ def backup_model(ruta_original: str, ruta_backup_dir: str):
 
 
 def inicializar_modelo():
-    global model, vectorizer, todas_las_clases, df, descripciones_confirmadas
+    global model, vectorizer, todas_las_clases, df, descripciones_confirmadas, sample_weights
 
     # Cargar el modelo y vectorizador desde archivo si existe
     model, vectorizer = cargar_modelo(RUTA_MODELO)
 
     # Cargar los datos desde el CSV
-    X, y, df_local = cargar_datos(RUTA_CSV)
+    X, y, df_local = cargar_datos(RUTA_CSV_CLEAN)
+    sample_weights = compute_sample_weight("balanced", y)
 
     # Inicializamos las clases
     todas_las_clases = sorted(list(set(y)))
@@ -396,7 +403,7 @@ CORS(app)
 @app.route("/api/cargar_csv", methods=["GET"])
 def cargar_csv():
     try:
-        df = pd.read_csv(RUTA_CSV, usecols=["CodArticle", "Description"], nrows=35000) 
+        df = pd.read_csv(RUTA_CSV_CLEAN, usecols=["CodArticle", "Description"], nrows=305000) 
         datos_csv = df.to_dict(orient="records")
         return jsonify({"data": datos_csv}), 200
         
@@ -470,6 +477,7 @@ def actualizar_predicciones_periodicamente():
 
                 # Normalizar y predecir
                 descripcion_procesada = procesar_texto(descripcion)
+                print(descripcion_procesada)
                 if descripcion_procesada in descripciones_confirmadas:
                     codigo_prediccion = descripciones_confirmadas[descripcion_procesada]
                     exactitud = 100

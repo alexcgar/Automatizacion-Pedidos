@@ -10,107 +10,24 @@ import {
   MDBInput,
 } from "mdb-react-ui-kit";
 import "../components_css/Login.css";
-import { authenticate, generateEntity } from "../../Services/apiServices";
-import axios from "axios";
+import { authenticate } from "../../Services/apiServices";
 import logo from "../../assets/novaLogo.png";
-
-const arrayBufferToBase64 = (buffer) => {
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return window.btoa(binary);
-};
 
 const Login = ({ setIsLoggedIn, setUserEmail, setUserPassword }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [audioBase64, setAudioBase64] = useState(null);
-  const [audioUrl, setAudioUrl] = useState(null);
-  const [entityGenerated, setEntityGenerated] = useState(false);
 
-  // Obtener el audio desde el servidor
   useEffect(() => {
-    const handleObtenerAudio = async () => {
-      try {
-        const response = await axios.get("http://localhost:5000/api/getAudio", {
-          responseType: "arraybuffer",
-        });
-
-        if (response.status === 200) {
-          // Convertir arraybuffer a base64
-          const base64String = arrayBufferToBase64(response.data);
-          setAudioBase64(base64String);
-
-          // Crear Blob URL para reproducir el audio
-          const audioBlob = new Blob([response.data], { type: "audio/mp3" });
-          const url = URL.createObjectURL(audioBlob);
-          setAudioUrl(url);
-        }
-      } catch (error) {
-        console.error("Error al obtener el audio:", error);
-      }
-    };
-
-    const intervalId = setInterval(handleObtenerAudio, 10000);
-
-    return () => clearInterval(intervalId);
-  }, []);
-
-  // Generar entidad cuando el audioBase64 esté disponible
-  useEffect(() => {
-    if (!audioBase64 || entityGenerated) {
-      return;
+    // Verificar si el usuario ya está logueado
+    const storedEmail = localStorage.getItem("userEmail");
+    const storedPassword = localStorage.getItem("userPassword");
+    if (storedEmail && storedPassword) {
+      setIsLoggedIn(true);
+      setUserEmail(storedEmail);
+      setUserPassword(storedPassword);
     }
-
-    const fetchPrediccionesAndGenerateEntity = async () => {
-      try {
-      const response = await fetch("http://localhost:5000/api/predicciones");
-
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const responseText = await response.text();
-        console.error("Respuesta inesperada:", responseText);
-        throw new Error("La respuesta no es un JSON válido");
-      }
-
-      const predicciones = await response.json();
-      if (predicciones && predicciones.length > 0 && audioUrl) {
-        const IdMessage = predicciones[0]?.correo_id;
-
-        // Filtrar las predicciones que coincidan con el IDMessage
-        const filteredPredicciones = predicciones.filter(prediccion => prediccion.correo_id === IdMessage);
-
-        const entityData = JSON.stringify({
-        CodCompany: "1",
-        IDWorkOrder: "1074241204161431", // Datos de ejemplo
-        IDEmployee: "0222", // ID de empleado
-        IDMessage: IdMessage, // ID de mensaje
-        TextTranscription: JSON.stringify(filteredPredicciones),
-        FileMP3: audioBase64,
-        });
-
-        try {
-        const entityResponse = await generateEntity(entityData);
-        console.log("Entidad generada exitosamente:", entityResponse);
-        setEntityGenerated(true);
-        } catch (error) {
-        console.error("Error al generar la entidad:", error);
-        setError("Error al generar la entidad: " + error.message);
-        }
-      }
-      } catch (error) {
-      setError("Error al obtener las predicciones: " + error.message);
-      }
-    };
-
-    const intervalId = setInterval(fetchPrediccionesAndGenerateEntity, 30000);
-
-    return () => clearInterval(intervalId);
-    }, [audioBase64, audioUrl, entityGenerated]);
+  }, [setIsLoggedIn, setUserEmail, setUserPassword]);
 
   const handleLogin = async () => {
     try {
@@ -119,6 +36,9 @@ const Login = ({ setIsLoggedIn, setUserEmail, setUserPassword }) => {
         setIsLoggedIn(true);
         setUserEmail(email);
         setUserPassword(password);
+        // Almacenar las credenciales en localStorage
+        localStorage.setItem("userEmail", email);
+        localStorage.setItem("userPassword", password);
       }
     } catch (error) {
       if (error.response) {

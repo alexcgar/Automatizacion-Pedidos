@@ -8,7 +8,7 @@ import DashBoard from "./components/DashBoard/DashBoard.jsx";
 import "mdb-react-ui-kit/dist/css/mdb.min.css";
 import "@fortawesome/fontawesome-free/css/all.min.css";
 import "./App.css";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 function App() {
   const [productosSeleccionados, setProductosSeleccionados] = useState([]);
@@ -18,6 +18,17 @@ function App() {
   const [password, setPassword] = useState("");
   const [showDashboard, setShowDashboard] = useState(true);
   const [idBoton, setIdBoton] = useState(null);
+
+  useEffect(() => {
+    // Verificar si el usuario ya está logueado
+    const storedEmail = localStorage.getItem("userEmail");
+    const storedPassword = localStorage.getItem("userPassword");
+    if (storedEmail && storedPassword) {
+      setIsLoggedIn(true);
+      setEmail(storedEmail);
+      setPassword(storedPassword);
+    }
+  }, []);
 
   const handleLogin = (isLoggedIn) => {
     setIsLoggedIn(isLoggedIn);
@@ -31,6 +42,16 @@ function App() {
 
   const handleNavigateToDashboard = () => {
     setShowDashboard(true);
+  };
+
+  const handleLogout = () => {
+    // Eliminar las credenciales de localStorage
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("userPassword");
+    // Actualizar el estado de inicio de sesión
+    setIsLoggedIn(false);
+    setEmail("");
+    setPassword("");
   };
 
   if (!isLoggedIn) {
@@ -62,7 +83,7 @@ function App() {
       <div className="row">
         <div className="col-12 mb-5 mt-2">
           <Navbar
-            setIsLoggedIn={setIsLoggedIn}
+            setIsLoggedIn={handleLogout}
             onNavigateToDashboard={handleNavigateToDashboard}
             isDashboardVisible={showDashboard} // Pasar la prop adicional
           />

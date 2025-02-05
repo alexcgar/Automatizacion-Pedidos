@@ -7,3 +7,13 @@ static/
 backups/
 backend/model/modelo_actualizado.joblib
 backend/model/consulta_resultado.csv
+results/*
+backend/model/audios/*
+backend/model/consulta_resultado_clean.csv
+backend/model/consulta_resultado_clean.parquet
+backend/model/consulta_resultado.parquet
+backend/model/descripciones_confirmadas.joblib
+backend/model/descripciones_confirmadas.json
+backend/model/conexion.py
+frontend/src/Services/Pruebas_React.jsx
+backend/model/normalization_rules.json
