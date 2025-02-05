@@ -3,7 +3,7 @@ Code
 # Project: Automated Prediction System
 
 ## Overview
-This project is a Flask-based backend application designed to automatically fetch, process, and provide product predictions. The system is particularly useful for scenarios involving large datasets.
+This project is a Flask-based backend application designed to automatically fetch, process, and provide product predictions. The system is particularly useful for scenarios involving large datasets. The frontend it´s fully developd using React.
 
 ## Features
 - **Automated Prediction Fetching**: Fetches and processes predictions periodically (every 3 minutes).
