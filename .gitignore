@@ -17,3 +17,4 @@ backend/model/descripciones_confirmadas.json
 backend/model/conexion.py
 frontend/src/Services/Pruebas_React.jsx
 backend/model/normalization_rules.json
+backend/model/conexion.py
