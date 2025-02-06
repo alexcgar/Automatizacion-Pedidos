@@ -1,4 +1,4 @@
-# Project: Automated Prediction System
+_# Project: Automated Prediction System
 
 ## Overview
 This project is a Flask-based backend application designed to automatically fetch, process, and provide product predictions. The system is particularly useful for scenarios involving large datasets. The frontend is fully developed using React.
@@ -45,45 +45,52 @@ This project is a Flask-based backend application designed to automatically fetc
   - `scikit-learn`
   - `thefuzz`
 
-
 ### Installation Steps
+
 1. **Clone the Repository**
    ```sh
-   git clone https://github.com/your-repo-name.git
-   cd your-repo-name
-Set Up the Backend
-Navigate to the backend directory and install dependencies:
+   git clone https://github.com/alexcgar/F-R.git
+   cd F-R
+   ```
 
+2. **Set Up the Backend**
+   Navigate to the backend directory and install dependencies:
+   ```sh
+   cd backend
+   pip install -r requirements.txt
+   ```
 
-cd backend
-pip install -r requirements.txt
-Set Up the Frontend
-Navigate to the frontend directory and install dependencies:
+3. **Set Up the Frontend**
+   Navigate to the frontend directory and install dependencies:
+   ```sh
+   cd ../frontend
+   npm install
+   ```
 
+4. **Build the Frontend**
+   Generate the production build of the frontend:
+   ```sh
+   npm run build
+   ```
+   This will create a `dist` folder with the necessary static files.
 
-cd ../frontend
-npm install
-Build the Frontend
-Generate the production build of the frontend:
+5. **Move Frontend Build to Backend**
+   Move the built frontend files to the backend static folder:
+   ```sh
+   mv dist/* ../backend/model/static/
+   ```
 
+6. **Run the Backend Server**
+   Navigate back to the backend and start the server:
+   ```sh
+   cd ../backend
+   python modelo_prediccion.py
+   ```
 
-npm run build
-This will create a dist folder with the necessary static files.
+7. **Access the Application**
+   Once the server is running, open your browser and go to:
+   ```sh
+   http://localhost:5000
+   ```
 
-Move Frontend Build to Backend
-Move the built frontend files to the backend static folder:
-
-
-mv dist/* ../backend/model/static/
-Run the Backend Server
-Navigate back to the backend and start the server:
-
-
-cd ../backend
-python modelo_prediccion.py
-Access the Application
-Once the server is running, open your browser and go to:
-
-
-http://localhost:5000
 This ensures that both the backend and frontend are properly set up and running.
