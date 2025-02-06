@@ -23,15 +23,18 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
   const [idWarehouse, setIdWarehouse] = useState(null);
   const [albaranesData, setAlbaranesData] = useState([]);
   const [ubicacionesData, setUbicacionesData] = useState([]);
-  const [mp3Ids, setMp3Ids] = useState([]); // Aquí guardamos los datos de la consulta MP3
+  const [mp3Ids, setMp3Ids] = useState([]); // Datos de la consulta MP3
   const [error, setError] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [loadingAlbaranes, setLoadingAlbaranes] = useState(false);
+  const [loadingUbicaciones, setLoadingUbicaciones] = useState(false);
 
+  // --- Función para obtener datos de MP3 ---
   const fetchMp3Data = async () => {
     try {
       console.log("Fetching MP3 data...");
       const response = await axios.post(
-        "https://erp.wskserver.com:56544/api/audiomp3toordersl/consult",
+        "https://dinasa.wskserver.com:56544/api/audiomp3toordersl/consult",
         {
           CodCompany: "1",
           CodUser: email,
@@ -53,60 +56,70 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
             ? JSON.parse(item.TextTranscription)
             : item.TextTranscription,
         }));
-        setMp3Ids(transformedData); // Guarda los resultados de la consulta MP3
+        setMp3Ids(transformedData);
       } else {
-        console.error("Error al obtener los datos del servidor.");
+        console.error("Error al obtener los datos del servidor (MP3).");
       }
     } catch (error) {
-      console.error("Error al conectar con el servidor:", error);
+      console.error("Error al conectar con el servidor (MP3):", error);
     }
   };
 
+  // --- Función para obtener Albaranes ---
   const fetchAlbaranes = async () => {
     if (idWarehouse) {
       console.log("Fetching Albaranes data...");
+      setLoadingAlbaranes(true);
       try {
         const data = await fetchAlbaranesSinFirmar("1", idWarehouse);
+        // Se actualiza el estado con los datos nuevos (puedes ajustar si quieres combinar datos antiguos y nuevos)
         setAlbaranesData(data);
       } catch (error) {
         console.error("Error fetching albaranes data", error);
+      } finally {
+        setLoadingAlbaranes(false);
       }
     }
   };
 
+  // --- Función para obtener Ubicaciones ---
   const fetchUbicaciones = async () => {
     if (idWarehouse) {
       console.log("Fetching Ubicaciones data...");
+      setLoadingUbicaciones(true);
       try {
-        const data = await fetchDocumentosSinUbicar(
-          "1",
-          "aef9438a-784f-450e-a8e9-5fa9c98c895b"
-        );
-        setUbicacionesData((prevData) => [
-          ...prevData.filter((item) => !data.some((d) => d.Item === item.Item)),
-          ...data,
-        ]);
+        const data = await fetchDocumentosSinUbicar("1", idWarehouse);
+        console.log(idWarehouse);
+        // Aquí se actualiza el estado; en este ejemplo se reemplazan los datos,
+        // pero si necesitas combinar (por ejemplo, añadir nuevos) puedes usar lógica de merge.
+        setUbicacionesData(data);
       } catch (error) {
         console.error("Error fetching ubicaciones data", error);
+      } finally {
+        setLoadingUbicaciones(false);
       }
     }
   };
 
+  // --- Función para refrescar todos los datos manualmente ---
   const refreshData = () => {
     console.log("Refreshing data...");
-    fetchPrediccionesAndGenerateEntity();
+    fetchPrediccionesAndGenerateEntity(); // Si se necesita para otro proceso
     fetchMp3Data();
     fetchAlbaranes();
     fetchUbicaciones();
   };
 
+  // --- Intervalos para actualizar automáticamente ---
   useEffect(() => {
+    // Actualiza MP3 cada 60 segundos
     fetchMp3Data();
-    const interval = setInterval(fetchMp3Data, 60000); // Actualiza cada 2 minutos
-    return () => clearInterval(interval); // Limpia el intervalo al desmontar el componente
+    const mp3Interval = setInterval(fetchMp3Data, 60000);
+    return () => clearInterval(mp3Interval);
   }, []);
 
   useEffect(() => {
+    // Se obtiene el idWarehouse mediante fetchLoginUser
     const fetchData = async () => {
       try {
         if (email && password) {
@@ -124,25 +137,24 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
   }, [email, password]);
 
   useEffect(() => {
+    // Una vez obtenido el idWarehouse, actualiza albaranes cada 60 segundos
     if (idWarehouse) {
       fetchAlbaranes();
-      const interval = setInterval(fetchAlbaranes, 60000); // Actualiza cada 2 minutos
-      return () => clearInterval(interval); // Limpia el intervalo al desmontar el componente
+      const albaranesInterval = setInterval(fetchAlbaranes, 90000);
+      return () => clearInterval(albaranesInterval);
     }
   }, [idWarehouse]);
 
   useEffect(() => {
+    // Una vez obtenido el idWarehouse, actualiza ubicaciones cada 60 segundos
     if (idWarehouse) {
       fetchUbicaciones();
-      const interval = setInterval(fetchUbicaciones, 60000); // Actualiza cada 2 minutos
-      return () => clearInterval(interval); // Limpia el intervalo al desmontar el componente
+      const ubicacionesInterval = setInterval(fetchUbicaciones, 90000);
+      return () => clearInterval(ubicacionesInterval);
     }
   }, [idWarehouse]);
 
-  const handleButtonClick = (id) => {
-    onButtonClick(id);
-  };
-
+  // --- Función para predicciones y generación de entidad (sin cambios) ---
   const fetchPrediccionesAndGenerateEntity = async () => {
     console.log("Obteniendo predicciones y generando entidad...");
     try {
@@ -187,10 +199,15 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
   };
 
   useEffect(() => {
+    // Refresca las predicciones cada 30 segundos
     fetchPrediccionesAndGenerateEntity();
-    const interval = setInterval(fetchPrediccionesAndGenerateEntity, 30000); // Actualiza cada 30 segundos
-    return () => clearInterval(interval); // Limpia el intervalo al desmontar el componente
+    const prediccionesInterval = setInterval(fetchPrediccionesAndGenerateEntity, 30000);
+    return () => clearInterval(prediccionesInterval);
   }, []);
+
+  const handleButtonClick = (id) => {
+    onButtonClick(id);
+  };
 
   return (
     <div>
@@ -199,13 +216,14 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
           <NavBar
             setIsLoggedIn={setIsLoggedIn}
             onNavigateToDashboard={refreshData}
-            isDashboardVisible={true} // Pasar la prop adicional
+            isDashboardVisible={true}
           />
         </div>
       </div>
 
       <div className="container-fluid">
         <div className="row text-center">
+          {/* Sección de Pedidos de Voz Recibidos */}
           <div className="col-xl-4 col-xxl-4 h-100 d-flex justify-content-center">
             <div className="card flex-fill h-100 border border-2 mt-5">
               <div className="card-header">
@@ -231,8 +249,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
                           <td>{item.IDWorkOrder}</td>
                           <td>{item.DesProject || ""}</td>
                           <td>
-                            {capitalizeFirstLetter(item.DesEmployee) ||
-                              "Empleado"}
+                            {capitalizeFirstLetter(item.DesEmployee) || "Empleado"}
                           </td>
                           <td>{item.TextTranscription.length}</td>
                           <td className="justify-content-center">
@@ -256,6 +273,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
             </div>
           </div>
 
+          {/* Sección de Albaranes Pendientes de Firmar */}
           <div className="col-xl-4 col-xxl-4">
             <div className="card flex-fill h-100 border border-2 mt-5">
               <div className="card-header">
@@ -265,10 +283,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
               </div>
               <div className="card-body table-container">
                 <table className="table-flex table-bordered">
-                  <thead
-                    className="align-middle"
-                    style={{ backgroundColor: "#222E3C" }}
-                  >
+                  <thead className="align-middle" style={{ backgroundColor: "#222E3C" }}>
                     <tr>
                       <th>Empleado</th>
                       <th>Nº de Albaranes Pendientes</th>
@@ -278,16 +293,14 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
                     {albaranesData
                       .sort((a, b) => b.Items.length - a.Items.length)
                       .map((item, index) => (
-                        // Usamos un fragmento para agrupar la fila principal y, si corresponde, la fila de detalle
                         <React.Fragment key={index}>
                           <tr
                             className="text-center"
                             onClick={() =>
                               setSelectedEmployee(
                                 selectedEmployee &&
-                                  selectedEmployee.Description ===
-                                    item.Description
-                                  ? null // Si se vuelve a pulsar el mismo, se cierra
+                                  selectedEmployee.Description === item.Description
+                                  ? null
                                   : item
                               )
                             }
@@ -297,18 +310,13 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
                             <td>{item.Items.length}</td>
                           </tr>
                           {selectedEmployee &&
-                            selectedEmployee.Description ===
-                              item.Description && (
+                            selectedEmployee.Description === item.Description && (
                               <tr>
                                 <td colSpan="2">
                                   <div className="child-table mt-2">
-                                    <h5>
-                                      Detalle para: {item.Description}
-                                    </h5>
+                                    <h5>Detalle para: {item.Description}</h5>
                                     <table className="table table-bordered">
-                                      <thead
-                                        style={{ backgroundColor: "#283746" }}
-                                      >
+                                      <thead style={{ backgroundColor: "#283746" }}>
                                         <tr>
                                           <th>Código de Albarán</th>
                                           <th>Fecha</th>
@@ -319,9 +327,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
                                           <tr key={idx}>
                                             <td>{it.CodDeliveryNote}</td>
                                             <td>
-                                              {new Date(
-                                                it.DeliveryNoteDate
-                                              ).toLocaleDateString()}
+                                              {new Date(it.DeliveryNoteDate).toLocaleDateString()}
                                             </td>
                                           </tr>
                                         ))}
@@ -339,6 +345,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
             </div>
           </div>
 
+          {/* Sección de SGA: Pendientes de Ubicar/Desubicar */}
           <div className="col-xl-4 col-xxl-4">
             <div className="card flex-fill h-100 border border-2 mt-5">
               <div className="card-header">
@@ -348,10 +355,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
               </div>
               <div className="card-body table-container">
                 <table className="table-flex table-bordered">
-                  <thead
-                    className="align-middle"
-                    style={{ backgroundColor: "#222E3C" }}
-                  >
+                  <thead className="align-middle" style={{ backgroundColor: "#222E3C" }}>
                     <tr>
                       <th>Nº de Albarán</th>
                       <th>Empleado</th>

@@ -10,51 +10,40 @@ import {
   MDBInput,
 } from "mdb-react-ui-kit";
 import "../components_css/Login.css";
-import { authenticate } from "../../Services/apiServices";
+import { fetchLoginUser } from "../../Services/apiServices";
 import logo from "../../assets/novaLogo.png";
 
 const Login = ({ setIsLoggedIn, setUserEmail, setUserPassword }) => {
-  const [email, setEmail] = useState("");
+  const [codUser, setCodUser] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
     // Verificar si el usuario ya está logueado
-    const storedEmail = localStorage.getItem("userEmail");
+    const storedUser = localStorage.getItem("userEmail");
     const storedPassword = localStorage.getItem("userPassword");
-    if (storedEmail && storedPassword) {
+    if (storedUser && storedPassword) {
       setIsLoggedIn(true);
-      setUserEmail(storedEmail);
+      setUserEmail(storedUser);
       setUserPassword(storedPassword);
     }
   }, [setIsLoggedIn, setUserEmail, setUserPassword]);
 
   const handleLogin = async () => {
+    setError(""); // Limpiar errores previos
     try {
-      const token = await authenticate(email, password);
-      if (token) {
-        setIsLoggedIn(true);
-        setUserEmail(email);
-        setUserPassword(password);
-        // Almacenar las credenciales en localStorage
-        localStorage.setItem("userEmail", email);
-        localStorage.setItem("userPassword", password);
-      }
-    } catch (error) {
-      if (error.response) {
-        console.error("Error en la respuesta del servidor:", error.response.data);
-        if (error.response.status === 401) {
-          setError("No autorizado. Por favor, verifique sus credenciales.");
-        } else {
-          setError(`Error: ${error.response.data.message || "Error desconocido"}`);
-        }
-      } else if (error.request) {
-        console.error("No se recibió respuesta del servidor:", error.request);
-        setError("No se recibió respuesta del servidor. Por favor, inténtelo de nuevo.");
-      } else {
-        console.error("Error al configurar la solicitud:", error.message);
-        setError("Error durante la autenticación. Por favor, inténtelo de nuevo.");
-      }
+      // Se obtiene la información del usuario mediante fetchLoginUser
+      await fetchLoginUser("1", codUser, password);
+
+      // Si se obtiene la información del usuario, se establece la sesión
+      setIsLoggedIn(true);
+      setUserEmail(codUser);
+      setUserPassword(password);
+      localStorage.setItem("userEmail", codUser);
+      localStorage.setItem("userPassword", password);
+    } catch {
+      // En caso de error, se muestra el mensaje de credenciales incorrectas
+      setError("Credenciales no válidas. Por favor, verifique sus datos.");
     }
   };
 
@@ -81,8 +70,8 @@ const Login = ({ setIsLoggedIn, setUserEmail, setUserPassword }) => {
                 id="formControlLgUsuario"
                 type="email"
                 size="lg"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={codUser}
+                onChange={(e) => setCodUser(e.target.value)}
               />
               <MDBInput
                 wrapperClass="mb-4 w-100"
