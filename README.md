@@ -1,9 +1,7 @@
-
-Code
 # Project: Automated Prediction System
 
 ## Overview
-This project is a Flask-based backend application designed to automatically fetch, process, and provide product predictions. The system is particularly useful for scenarios involving large datasets. The frontend it´s fully developd using React.
+This project is a Flask-based backend application designed to automatically fetch, process, and provide product predictions. The system is particularly useful for scenarios involving large datasets. The frontend is fully developed using React.
 
 ## Features
 - **Automated Prediction Fetching**: Fetches and processes predictions periodically (every 3 minutes).
@@ -47,3 +45,45 @@ This project is a Flask-based backend application designed to automatically fetc
   - `scikit-learn`
   - `thefuzz`
 
+
+### Installation Steps
+1. **Clone the Repository**
+   ```sh
+   git clone https://github.com/your-repo-name.git
+   cd your-repo-name
+Set Up the Backend
+Navigate to the backend directory and install dependencies:
+
+
+cd backend
+pip install -r requirements.txt
+Set Up the Frontend
+Navigate to the frontend directory and install dependencies:
+
+
+cd ../frontend
+npm install
+Build the Frontend
+Generate the production build of the frontend:
+
+
+npm run build
+This will create a dist folder with the necessary static files.
+
+Move Frontend Build to Backend
+Move the built frontend files to the backend static folder:
+
+
+mv dist/* ../backend/model/static/
+Run the Backend Server
+Navigate back to the backend and start the server:
+
+
+cd ../backend
+python modelo_prediccion.py
+Access the Application
+Once the server is running, open your browser and go to:
+
+
+http://localhost:5000
+This ensures that both the backend and frontend are properly set up and running.
