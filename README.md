@@ -1,6 +1,6 @@
 # 🚀 Sistema Automatizado de Predicción de Productos
 
-Este proyecto es una aplicación **backend** basada en **Flask** que automatiza el proceso de obtención, procesamiento y predicción de productos a partir de descripciones. Se integra con un frontend en **React** y utiliza dos fuentes de datos CSV para entrenar el modelo y para presentar la información original al usuario.
+Este proyecto es una aplicación backend basada en Flask que automatiza el proceso de obtención, procesamiento y predicción de productos a partir de descripciones. El sistema recibe datos desde un archivo de audio, los transcribe a texto y luego los procesa para interpretar y gestionar los pedidos. Se integra con un frontend en React y utiliza dos fuentes de datos CSV: una para entrenar el modelo de predicción y otra para presentar la información original al usuario
 
 ---
 
