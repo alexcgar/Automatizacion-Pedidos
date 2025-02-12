@@ -1,56 +1,60 @@
 # 🚀 Sistema Automatizado de Predicción de Productos
 
-Una aplicación **backend** basada en Flask diseñada para **automatizar la predicción de códigos de productos** a partir de descripciones. Este sistema es ideal para trabajar con grandes volúmenes de datos y se integra con un frontend desarrollado en React. Además, utiliza dos fuentes de datos:
-- **consulta_resultado_clean.csv**: Se utiliza para entrenar el modelo y homogeneizar el preprocesamiento.
-- **consulta_resultado.csv**: Se utiliza sin alterar para entregar la información original al usuario.
+Este proyecto es una aplicación **backend** basada en **Flask** que automatiza el proceso de obtención, procesamiento y predicción de productos a partir de descripciones. Se integra con un frontend en **React** y utiliza dos fuentes de datos CSV para entrenar el modelo y para presentar la información original al usuario.
 
 ---
 
 ## 📋 Descripción General
 
-El proyecto cuenta con las siguientes características:
+El sistema realiza las siguientes tareas:
 
-- **Actualización Automática de Predicciones**  
-  🚦 Un hilo en segundo plano actualiza las predicciones cada 3 minutos, consultando nuevos correos y procesando los datos.
+- **Obtención de Correos**:  
+  Utiliza Microsoft Graph para acceder a los correos no leídos de una cuenta y extraer los productos mediante el procesamiento del cuerpo del mensaje.
 
-- **Integración de Machine Learning**  
-  🧠 Utiliza un modelo entrenado (SGDClassifier con TF-IDF) para predecir códigos de producto a partir de descripciones preprocesadas.
+- **Preprocesamiento de Texto**:  
+  Normaliza las descripciones (minúsculas, eliminación de puntuación y palabras irrelevantes) para homogeneizar los datos y facilitar la predicción.
 
-- **Uso de Dos Fuentes de Datos**  
-  - **CSV Clean**: Se utiliza para el entrenamiento y la vectorización (aplicando un preprocesamiento homogéneo).  
-  - **CSV Original**: Se consulta para obtener la información original que se mostrará al usuario, sin ningún cambio.
+- **Predicción con Fuzzy Matching**:  
+  Se aplica un algoritmo de _fuzzy matching_ (usando `difflib`) para encontrar la descripción más similar en el CSV de datos limpios (`consulta_resultado_clean.csv`) y se obtiene el código de producto correspondiente.
 
-- **API RESTful**  
-  🔌 Proporciona varios endpoints:
-  - `/api/predicciones`: Devuelve las últimas predicciones almacenadas en caché.
-  - `/api/send-seleccion`: Recibe y procesa la selección del usuario, actualizando el modelo.
-  - `/api/buscar`: (Opcional) Permite buscar productos en la base de datos CSV.
-  - `/api/getAudio`: Descarga archivos de audio relacionados con las predicciones.
+- **Lookup de Información Original**:  
+  Una vez obtenido el código de producto, se consulta el CSV original (`consulta_resultado.csv`) para extraer la información completa (por ejemplo, descripción real, imagen, ID, etc.) que se mostrará al usuario sin alterar.
 
-- **Preprocesamiento de Texto**  
-  ✂️ Normaliza las descripciones (minúsculas, eliminación de tildes, eliminación de puntuación irrelevante, etc.) para mejorar la precisión del modelo.
+- **Actualización del Modelo y Retroalimentación**:  
+  Permite que, mediante el endpoint `/api/send-seleccion`, el usuario envíe correcciones o selecciones que se integran en el sistema y actualizan las predicciones.
 
-- **Operaciones Seguras en Entornos Multihilo**  
-  🔒 El uso de locks asegura que las actualizaciones de la caché sean seguras.
+- **Descarga de Archivos de Audio**:  
+  Si un correo contiene adjuntos en formato MP3, se pueden descargar a través del endpoint `/api/getAudio`.
+
+- **Operaciones en Segundo Plano y Seguridad Multihilo**:  
+  Un hilo se encarga de actualizar las predicciones cada 10 segundos (ajustable) de forma segura mediante _locks_ para evitar problemas en entornos multihilo.
 
 ---
 
-## ⚙️ ¿Cómo Funciona?
+## ⚙️ Funcionalidades y Endpoints
 
-1. **Carga de Datos y Entrenamiento**  
-   - Se cargan los datos desde `consulta_resultado_clean.csv` y se preprocesan para entrenar el modelo.
-   - Simultáneamente, se carga `consulta_resultado.csv` sin alterar para posteriores búsquedas de información original.
-   - Se calcula el peso de las muestras para manejar el balanceo de clases.
-   - Se inicializa el modelo y el vectorizador (o se carga desde archivo si ya existe).
+- **Actualización Automática**  
+  🔄 Un proceso en segundo plano obtiene correos y actualiza las predicciones en memoria periódicamente.
 
-2. **Actualización Periódica**  
-   - Un hilo de fondo consulta el correo, extrae las descripciones y genera predicciones.
-   - Se utiliza el modelo entrenado para predecir el código de producto a partir de la versión preprocesada del texto.
-   - Una vez obtenida la predicción, se busca en `consulta_resultado.csv` la información original que se entregará al usuario.
+- **API RESTful**  
+  🔌 La aplicación ofrece los siguientes endpoints:
+  - `GET /api/cargar_csv`  
+    → Devuelve un subconjunto de los datos originales (del CSV `consulta_resultado.csv`) para mostrar productos.
+  - `POST /api/send-seleccion`  
+    → Recibe la selección del usuario y actualiza el modelo (incorporando la corrección).
+  - `GET /api/getAudio`  
+    → Descarga el archivo de audio (si lo hay) de un correo.
+  - `GET /api/predicciones`  
+    → Devuelve las últimas predicciones almacenadas.
+  - `POST /api/marcar_leido`  
+    → Marca un correo como leído en Microsoft Graph.
+  - Además, se sirven las rutas para los archivos estáticos y la aplicación React.
 
-3. **Interacción a Través de la API**  
-   - Los endpoints permiten consultar las predicciones, enviar correcciones y descargar archivos de audio relacionados.
-   - Las operaciones se realizan de forma segura en un entorno multihilo.
+- **Fuzzy Matching para Predicción**  
+  🔍 Se utiliza `difflib` para buscar coincidencias cercanas entre la descripción procesada del correo y el CSV de datos limpios, y de esa forma obtener el código de producto.
+
+- **Lookup en CSV Original**  
+  📄 La información mostrada al usuario se extrae directamente de `consulta_resultado.csv` sin modificaciones, garantizando que los datos presentados sean los originales.
 
 ---
 
@@ -58,16 +62,17 @@ El proyecto cuenta con las siguientes características:
 
 - **Backend (Python):**
   - [Flask](https://flask.palletsprojects.com/) ⚡
-  - [Flask-CORS](https://flask-cors.readthedocs.io/)  
-  - [Pandas](https://pandas.pydata.org/)  
-  - [Scikit-learn](https://scikit-learn.org/)  
-  - [Joblib](https://joblib.readthedocs.io/) para la serialización del modelo  
+  - [Flask-CORS](https://flask-cors.readthedocs.io/)
+  - [Pandas](https://pandas.pydata.org/)
+  - [Scikit-learn](https://scikit-learn.org/)
+  - [Joblib](https://joblib.readthedocs.io/) para la serialización de modelos
   - [MSAL](https://github.com/AzureAD/microsoft-authentication-library-for-python) para autenticación con Microsoft Graph
-  - [Threading](https://docs.python.org/3/library/threading.html) para tareas en segundo plano
+  - [difflib](https://docs.python.org/3/library/difflib.html) para fuzzy matching
+  - Módulos estándar: `os`, `re`, `time`, `json`, `shutil`, `base64`, `threading`, `ast`
 
 - **Machine Learning:**
-  - **TF-IDF Vectorization** para la transformación de texto  
-  - **SGDClassifier** para la clasificación
+  - **TF-IDF Vectorization** para transformar texto
+  - **Fuzzy Matching** para similitud de descripciones
 
 - **Frontend:**
   - [React](https://reactjs.org/) 💻
@@ -80,95 +85,13 @@ El proyecto cuenta con las siguientes características:
 
 - **Python 3.7+**
 - **Node.js** (para el frontend)
-- Las siguientes librerías de Python:
-  - `flask`, `flask-cors`, `pandas`, `scikit-learn`, `joblib`, `msal`
+- Librerías de Python (ver `requirements.txt`):
+  - `flask`, `flask-cors`, `pandas`, `scikit-learn`, `joblib`, `msal`, entre otras.
 
 ### Pasos de Instalación
 
 1. **Clonar el Repositorio**
 
-   ```sh
+   ```bash
    git clone https://github.com/alexcgar/F-R.git
    cd F-R
-Configurar el Backend
-
-Navega a la carpeta del backend e instala las dependencias:
-
-sh
-Copiar
-Editar
-cd backend
-pip install -r requirements.txt
-Configurar el Frontend
-
-Navega a la carpeta del frontend e instala las dependencias:
-
-sh
-Copiar
-Editar
-cd ../frontend
-npm install
-Construir el Frontend
-
-Genera la versión de producción del frontend:
-
-sh
-Copiar
-Editar
-npm run build
-Esto creará una carpeta dist con los archivos estáticos necesarios.
-
-Mover el Build del Frontend al Backend
-
-Mueve los archivos del build a la carpeta estática del backend:
-
-sh
-Copiar
-Editar
-mv dist/* ../backend/model/static/
-Ejecutar el Servidor Backend
-
-Regresa a la carpeta del backend y ejecuta el servidor:
-
-sh
-Copiar
-Editar
-cd ../backend
-python modelo_prediccion.py
-Acceder a la Aplicación
-
-Una vez que el servidor esté en ejecución, abre tu navegador y visita:
-
-sh
-Copiar
-Editar
-http://localhost:5000
-🔄 Flujo de Trabajo
-Entrenamiento y Actualización:
-El modelo se entrena usando consulta_resultado_clean.csv. Cada 3 minutos se actualizan las predicciones consultando nuevos correos.
-
-Predicción y Lookup:
-El texto de entrada se preprocesa y se usa para predecir un código de producto. Con ese código, se consulta consulta_resultado.csv para obtener la información original que se entrega al usuario.
-
-Interacción con la API:
-Los usuarios pueden consultar las predicciones, enviar sus selecciones o descargar archivos de audio a través de los endpoints disponibles.
-
-📞 Contacto
-Si tienes alguna duda o sugerencia, ¡no dudes en contactarme!
-Alejandro Caparrós García
-
-¡Gracias por tu interés y feliz desarrollo! 😄✨
-
-yaml
-Copiar
-Editar
-
----
-
-Este **README.md** está diseñado para ser claro, visual y reflejar con precisión el funcionamiento actual del backend, manteniendo la integridad de la información que se entrega al usuario y explicando paso a paso el flujo de trabajo del sistema. ¡Espero que te resulte útil!
-
-
-
-
-
-
