@@ -6,7 +6,6 @@ import {
   authenticate,
 } from "../../Services/apiServices";
 import axios from "axios";
-import "../components_css/Audio.css";
 
 const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
   const [employeeInfo, setEmployeeInfo] = useState(null);
@@ -15,15 +14,12 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [entityData, setEntityData] = useState(null);
 
-  
- 
-
   // Fetch entity data using idBoton
   useEffect(() => {
     const fetchEntityData = async () => {
       try {
         const response = await axios.post(
-          "https://dinasa.wskserver.com:56544/api/audiomp3toordersl/consult",
+          "https://erp.wskserver.com:56544/api/audiomp3toordersl/consult",
           {
             CodCompany: "1",
             CodUser: "juani",
@@ -94,30 +90,31 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
       };
 
       console.log("Generando pedido:", orderData);
+      const orderResponse = await generateOrder(orderData);
+      console.log("Pedido generado exitosamente:", orderResponse);
+      setOrderGenerated(orderResponse);
 
-      try {
-        const orderResponse = await generateOrder(orderData);
-        console.log("Pedido generado exitosamente:", orderResponse);
-        setOrderGenerated(orderResponse);
-
-        const correoId = entityData[0].TextTranscription[0]?.correo_id;
-        if (correoId) {
+      // Marcar el correo como leído una vez generado el pedido
+      const correoId = entityData[0].TextTranscription[0]?.correo_id;
+      if (correoId) {
+        try {
           await axios.post("http://localhost:5000/api/marcar_leido", {
             correo_id: correoId,
           });
           console.log(`Correo ${correoId} marcado como leído.`);
+        } catch (markError) {
+          console.error(
+            "Error al marcar el correo como leído:",
+            markError.message
+          );
         }
-
-        setTimeout(() => {
-          setIsLoggedIn(false);
-        }, 10000);
-      } catch (error) {
-        console.error("Error al generar el pedido:", error);
-        setError("Error al generar el pedido: " + error.message);
       }
+
+      // Redirige inmediatamente al Dashboard (salir de Employee)
+      setIsLoggedIn(false);
     } catch (error) {
-      console.error("Error al obtener predicciones:", error);
-      setError("Error al obtener predicciones: " + error.message);
+      console.error("Error al generar el pedido:", error);
+      setError("Error al generar el pedido: " + error.message);
     } finally {
       setIsLoading(false);
     }
@@ -132,32 +129,37 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
           bordered
           hover
           variant="light"
-          className="border border-5 m-1 mb-3"
+          className="border border-5 m-1 mb-"
+          style={{ fontSize: "1.1rem" }} // Sin espacio entre el número y 'rem'
         >
           <thead>
             <tr>
-              <th>EMPLEADO</th>
-              <th>ORDEN DE TRABAJO</th>
-              <th>CLIENTE</th>
-              <th>FINCA</th>
-              <th>PROYECTO</th>
+              <th>
+                <strong>EMPLEADO</strong>
+              </th>
+              <th>
+                <strong>ORDEN DE TRABAJO</strong>
+              </th>
+              <th>
+                <strong>CLIENTE</strong>
+              </th>
+              <th>
+                <strong>FINCA</strong>
+              </th>
+              <th>
+                <strong>PROYECTO</strong>
+              </th>
             </tr>
           </thead>
           <tbody>
             <tr>
+              <td>{employeeInfo.DesEmployee}</td>
+              <td>{employeeInfo.IDWorkOrder}</td>
+              <td>ALMONDPLUS CINCO SL</td>
+              <td>{employeeInfo.DesCustomerDeliveryAddress}</td>
               <td>
-                <strong>{employeeInfo.DesEmployee}</strong>
-              </td>
-              <td>
-                <strong>{employeeInfo.IDWorkOrder}</strong>
-              </td>
-              <td>
-                <strong>ALMONDPLUS CINCO SL </strong>
-              </td>
-              <td><strong>{employeeInfo.DesCustomerDeliveryAddress}</strong></td>
-              <td>
-                <strong>{employeeInfo.CodProject} {employeeInfo.VersionProject}{" "}
-                {employeeInfo.DesProject}</strong>
+                {employeeInfo.CodProject} {employeeInfo.VersionProject}{" "}
+                {employeeInfo.DesProject}
               </td>
             </tr>
           </tbody>
@@ -166,7 +168,7 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
         <p>Cargando información del empleado...</p>
       )}
       {orderGenerated && (
-        <Alert variant="success" className="text-center">
+        <Alert variant="success" className="text-center mt-1">
           <strong>Pedido generado correctamente.</strong>
           <br />
           <strong>Código de Pedido:</strong> {orderGenerated.data.CodOrder}
@@ -180,9 +182,15 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
           <Spinner animation="border" variant="primary" />
         </div>
       )}
-      <div className="d-flex justify-content-center ">
+      <div className="d-flex justify-content-center mt-3 mb-4">
         <Button
-          style={{ backgroundColor: "#283746", width: "100%" }}
+          style={{
+            backgroundColor: "#28374C", // Código hexadecimal válido
+            width: "100%",
+            fontSize: "1.1rem",
+            boxShadow: "none",
+            border: "none",
+          }}
           onClick={handleGenerateOrder}
           disabled={isLoading}
         >

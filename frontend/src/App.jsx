@@ -7,7 +7,6 @@ import Login from "./components/Login/Login.jsx";
 import DashBoard from "./components/DashBoard/DashBoard.jsx";
 import "mdb-react-ui-kit/dist/css/mdb.min.css";
 import "@fortawesome/fontawesome-free/css/all.min.css";
-import "./App.css";
 import { useState, useEffect } from "react";
 
 function App() {

@@ -1,6 +1,8 @@
-.letra {
-   font-family: Poppins;
-}
 .container, .container-fluid, .container-lg, .container-md, .container-sm, .container-xl, .container-xxl {
    --bs-gutter-x: unset;
+}
+
+
+body {
+font-family: 'Roboto Condensed', sans-serif; /* Cambia 'Roboto Condensed' por la fuente que prefieras */
 }

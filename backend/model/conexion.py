@@ -23,7 +23,7 @@ def Query():
     if conn is not None:
         cur = conn.cursor()
         sql = """
-        select  CodArticle, Description, IDArticle
+        select  CodArticle, Description, IDArticle, Image
         FROM [RPSNovedades2015].[dbo].[STKArticle]
         WHERE InactiveDate is null  AND CodCompany = '1'
         ORDER BY CodArticle;

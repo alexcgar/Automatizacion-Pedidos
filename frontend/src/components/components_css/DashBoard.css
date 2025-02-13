@@ -7,17 +7,17 @@
 }
 
 .table-flex th {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 200;
     color: #fff;
 }
 
 .table-flex td {
-    font-size: 14px; 
+    font-size: 17px; 
 }
 
 .table-flex tr {
-    font-size: 16px;
+    font-size: 17px;
 }
 
 .card-body {

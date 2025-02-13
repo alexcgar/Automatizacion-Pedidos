@@ -3,7 +3,7 @@ import axios from 'axios';
 
 
 
-const API_SERVER = 'https://dinasa.wskserver.com:56544';
+const API_SERVER = 'https://erp.wskserver.com:56544';
 const USERNAME = "apiuser";
 const PASSWORD = "XFBORp6srOlNY96qFLmr";
 

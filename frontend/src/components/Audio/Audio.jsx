@@ -54,13 +54,13 @@ function AudioPlayer({ setAudioBase64 }) {
   };
 
   return (
-    <div className="text-white text-center ">
+    <div className="text-white text-center mb-3 mt-3 ">
       <Button
         className="mb-1 "
         onClick={() => {
           setOpen(!open);
         }}
-        style={{ backgroundColor: "#283746", width: "100%" }}
+        style={{ backgroundColor: "#283746", width: "100%", fontSize: "1.1rem" }}
       >
         {open ? "Cerrar Detalles" : "Ver Detalles del Audio"}
       </Button>

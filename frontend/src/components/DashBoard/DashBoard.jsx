@@ -1,6 +1,4 @@
-/* eslint-disable no-unused-vars */
-/* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import PropTypes from "prop-types";
 import "../components_css/DashBoard.css";
 import NavBar from "../Navbar/Navbar";
@@ -13,201 +11,429 @@ import {
 } from "../../Services/apiServices";
 import axios from "axios";
 
+const AUDIO_API_URL = "http://localhost:5000/api/getAudio"; //Usa variable de entorno.
+
+// Interceptor para manejar errores 401
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response && error.response.status === 401) {
+      console.warn("Token expirado o no autorizado. Se intentará reautenticar...");
+      try {
+        const newToken = await authenticate(); // Implementa la lógica de refresco/re autenticación
+        // Actualiza el header de autorización en la configuración original
+        error.config.headers["Authorization"] = `Bearer ${newToken}`;
+        // Reintenta la petición con el nuevo token
+        return axios.request(error.config);
+      } catch (authError) {
+        console.error("Error al re autenticarse:", authError);
+        return Promise.reject(error);
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 const capitalizeFirstLetter = (str) => {
-  return str.replace(/\w\S*/g, function (txt) {
+  return str?.replace(/\w\S*/g, function (txt) {
     return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
   });
+};
+
+// Función para formatear fechas.
+const formatDate = (dateString) => {
+  return new Date(dateString).toLocaleDateString();
+};
+
+// Funcion para manejar llamadas a la API.
+const useApiCall = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const apiCall = useCallback(async (apiFunction, ...args) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiFunction(...args);
+      return data;
+    } catch (err) {
+      const errorMessage =
+        err.response?.data?.message || err.message || "Error desconocido";
+      setError(errorMessage);
+      console.error("Error en la llamada a la API:", err);
+      return null; // Importante retornar null en caso de error
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { loading, error, apiCall };
 };
 
 const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
   const [idWarehouse, setIdWarehouse] = useState(null);
   const [albaranesData, setAlbaranesData] = useState([]);
   const [ubicacionesData, setUbicacionesData] = useState([]);
-  const [mp3Ids, setMp3Ids] = useState([]); // Datos de la consulta MP3
-  const [error, setError] = useState("");
+  const [mp3Ids, setMp3Ids] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
-  const [loadingAlbaranes, setLoadingAlbaranes] = useState(false);
-  const [loadingUbicaciones, setLoadingUbicaciones] = useState(false);
 
-  // --- Función para obtener datos de MP3 ---
-  const fetchMp3Data = async () => {
+  const {
+    apiCall: apiCallAlbaranes,
+  } = useApiCall();
+  const {
+    apiCall: apiCallUbicaciones,
+  } = useApiCall();
+  const {
+    apiCall: apiCallMp3,
+  } = useApiCall();
+  const { apiCall: apiCallPredicciones } = useApiCall();
+
+
+  // Transforma la transcripción.
+  const transformTranscription = useCallback((transcription) => {
     try {
-      console.log("Fetching MP3 data...");
-      const response = await axios.post(
-        "https://dinasa.wskserver.com:56544/api/audiomp3toordersl/consult",
-        {
-          CodCompany: "1",
-          CodUser: email,
-          IDMessage: "",
-          IsAll: false,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${await authenticate()}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (response.data && response.data.success) {
-        const transformedData = response.data.data.map((item) => ({
-          ...item,
-          TextTranscription: item.TextTranscription.startsWith("[")
-            ? JSON.parse(item.TextTranscription)
-            : item.TextTranscription,
-        }));
-        setMp3Ids(transformedData);
-      } else {
-        console.error("Error al obtener los datos del servidor (MP3).");
-      }
+      return transcription.startsWith("[")
+        ? JSON.parse(transcription)
+        : transcription;
     } catch (error) {
-      console.error("Error al conectar con el servidor (MP3):", error);
+      console.error("Error parsing transcription:", error);
+      return transcription; // Devuelve original si falla el parseo.
     }
-  };
-
-  // --- Función para obtener Albaranes ---
-  const fetchAlbaranes = async () => {
-    if (idWarehouse) {
-      console.log("Fetching Albaranes data...");
-      setLoadingAlbaranes(true);
-      try {
-        const data = await fetchAlbaranesSinFirmar("1", idWarehouse);
-        // Se actualiza el estado con los datos nuevos (puedes ajustar si quieres combinar datos antiguos y nuevos)
-        setAlbaranesData(data);
-      } catch (error) {
-        console.error("Error fetching albaranes data", error);
-      } finally {
-        setLoadingAlbaranes(false);
-      }
-    }
-  };
-
-  // --- Función para obtener Ubicaciones ---
-  const fetchUbicaciones = async () => {
-    if (idWarehouse) {
-      console.log("Fetching Ubicaciones data...");
-      setLoadingUbicaciones(true);
-      try {
-        const data = await fetchDocumentosSinUbicar("1", idWarehouse);
-        console.log(idWarehouse);
-        // Aquí se actualiza el estado; en este ejemplo se reemplazan los datos,
-        // pero si necesitas combinar (por ejemplo, añadir nuevos) puedes usar lógica de merge.
-        setUbicacionesData(data);
-      } catch (error) {
-        console.error("Error fetching ubicaciones data", error);
-      } finally {
-        setLoadingUbicaciones(false);
-      }
-    }
-  };
-
-  // --- Función para refrescar todos los datos manualmente ---
-  const refreshData = () => {
-    console.log("Refreshing data...");
-    fetchPrediccionesAndGenerateEntity(); // Si se necesita para otro proceso
-    fetchMp3Data();
-    fetchAlbaranes();
-    fetchUbicaciones();
-  };
-
-  // --- Intervalos para actualizar automáticamente ---
-  useEffect(() => {
-    // Actualiza MP3 cada 60 segundos
-    fetchMp3Data();
-    const mp3Interval = setInterval(fetchMp3Data, 60000);
-    return () => clearInterval(mp3Interval);
   }, []);
 
+  // Fetch MP3 Data.
+  const fetchMp3Data = useCallback(async () => {
+    const data = await apiCallMp3(
+      axios.post,
+      "https://erp.wskserver.com:56544/api/audiomp3toordersl/consult",
+      {
+        CodCompany: "1",
+        CodUser: email,
+        IDMessage: "",
+        IsAll: false,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${await authenticate()}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (data && data.data && data.data.success) {
+      const transformedData = data.data.data.map((item) => ({
+        ...item,
+        TextTranscription: transformTranscription(item.TextTranscription),
+      }));
+      setMp3Ids(transformedData);
+    }
+  }, [apiCallMp3, email, transformTranscription]);
+
+  // Fetch Albaranes.
+  const fetchAlbaranes = useCallback(async () => {
+    if (idWarehouse) {
+      const data = await apiCallAlbaranes(fetchAlbaranesSinFirmar, "1", idWarehouse);
+      if (data) {
+        setAlbaranesData(data);
+      }
+    }
+  }, [apiCallAlbaranes, idWarehouse]);
+
+  // Fetch Ubicaciones.
+  const fetchUbicaciones = useCallback(async () => {
+    if (idWarehouse) {
+      const data = await apiCallUbicaciones(fetchDocumentosSinUbicar, "1", idWarehouse);
+      if (data) {
+        setUbicacionesData(data);
+      }
+    }
+  }, [apiCallUbicaciones, idWarehouse]);
+
+  // Función para obtener el audio en base64
+  const fetchAudioBase64 = useCallback(async () => {
+    try {
+      const response = await axios.get(AUDIO_API_URL, {
+        responseType: "blob",
+      });
+
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(response.data);
+        reader.onloadend = () => {
+          resolve(reader.result.split(",")[1]);
+        };
+        reader.onerror = (error) => reject(error);
+      });
+    } catch (error) {
+      console.error("Error fetching audio:", error);
+      return null; // Importante retornar null
+    }
+  }, []);
+
+
+  const generateEntityFromPredictions = useCallback(async (prediccionesArray) => {
+    const base64Audio = await fetchAudioBase64();
+    if (!base64Audio) {
+      console.error("No se pudo obtener el audio.");
+      return;
+    }
+
+    // Usamos el correo_id y la imagen de la primera predicción (o se podría definir otro criterio)
+    const correo_id = prediccionesArray.length > 0 ? prediccionesArray[0].correo_id : "";
+    const fileImg =
+      prediccionesArray.length > 0 && prediccionesArray[0].imagen
+        ? prediccionesArray[0].imagen
+        : null;
+
+    const entityData = {
+      CodCompany: "1",
+      IDWorkOrder: "1074241204161431",
+      IDEmployee: "0222",
+      IDMessage: correo_id,
+      // Se envía el arreglo completo de predicciones en formato string JSON
+      TextTranscription: JSON.stringify(prediccionesArray),
+      FileMP3: base64Audio,
+      FileIMG: fileImg,
+    };
+
+    console.debug("Enviando entidad con datos:", entityData);
+    console.log("Enviando entidad con datos:", entityData);
+
+    try {
+      const entityResponse = await apiCallPredicciones(generateEntity, entityData);
+      if (entityResponse) {
+        console.log("Entidad generada exitosamente:", entityResponse);
+      } else {
+        console.warn("No se obtuvo respuesta para la entidad.");
+      }
+    } catch (error) {
+      console.error("Error al generar la entidad:", error);
+    }
+  }, [apiCallPredicciones, fetchAudioBase64]);
+
+
+  const fetchPredicciones = useCallback(async () => {
+    const response = await apiCallPredicciones(fetch, "http://localhost:5000/api/predicciones");
+    if (!response) return; // Salir si la llamada falla
+
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      const responseText = await response.text();
+      console.error("Respuesta inesperada:", responseText);
+      return;
+    }
+
+    let parsedResponse;
+    try {
+      let responseText = await response.text();
+      // Reemplaza NaN por null para evitar errores de parseo
+      responseText = responseText.replace(/\bNaN\b/g, "null");
+      parsedResponse = JSON.parse(responseText);
+      console.log("Predicciones recibidas:", parsedResponse);
+    } catch (error) {
+      console.error("Error al parsear predicciones:", error);
+      return;
+    }
+
+    // Verificamos si la respuesta es un array o si es un objeto con la propiedad "predicciones"
+    let prediccionesArray = [];
+    if (Array.isArray(parsedResponse)) {
+      prediccionesArray = parsedResponse;
+    } else if (parsedResponse.predicciones && Array.isArray(parsedResponse.predicciones)) {
+      prediccionesArray = parsedResponse.predicciones;
+    } else {
+      // No hay predicciones; no es un error, solo no hay datos
+      console.warn("No hay predicciones disponibles.");
+      return;
+    }
+
+    // Si el array está vacío, simplemente continuamos sin generar entidad
+    if (prediccionesArray.length === 0) {
+      console.warn("El array de predicciones está vacío.");
+      return;
+    }
+
+    // Enviar las predicciones recibidas
+    await generateEntityFromPredictions(prediccionesArray);
+  }, [apiCallPredicciones, generateEntityFromPredictions]);
+
+  // --- Efecto para obtener el idWarehouse ---
   useEffect(() => {
-    // Se obtiene el idWarehouse mediante fetchLoginUser
     const fetchData = async () => {
-      try {
-        if (email && password) {
-          const userInfo = await fetchLoginUser("1", email, password);
+      if (email && password) {
+        const userInfo = await apiCallAlbaranes(fetchLoginUser, "1", email, password); // Usa la función genérica
+        if (userInfo) {
           setIdWarehouse(userInfo.IDWarehouse);
         }
-      } catch (error) {
-        console.error("Error fetching user info", error);
       }
     };
 
     if (email && password) {
       fetchData();
     }
-  }, [email, password]);
+  }, [email, password, apiCallAlbaranes]); // Dependencias correctas
 
+  // --- Efecto para refrescar datos ---
   useEffect(() => {
-    // Una vez obtenido el idWarehouse, actualiza albaranes cada 60 segundos
     if (idWarehouse) {
+      fetchMp3Data();
       fetchAlbaranes();
-      const albaranesInterval = setInterval(fetchAlbaranes, 90000);
-      return () => clearInterval(albaranesInterval);
-    }
-  }, [idWarehouse]);
-
-  useEffect(() => {
-    // Una vez obtenido el idWarehouse, actualiza ubicaciones cada 60 segundos
-    if (idWarehouse) {
       fetchUbicaciones();
-      const ubicacionesInterval = setInterval(fetchUbicaciones, 90000);
-      return () => clearInterval(ubicacionesInterval);
+      fetchPredicciones();
+
+      const mp3Interval = setInterval(fetchMp3Data, 120000);
+      const albaranesInterval = setInterval(fetchAlbaranes, 120000);
+      const ubicacionesInterval = setInterval(fetchUbicaciones, 120000);
+      const prediccionesInterval = setInterval(fetchPredicciones, 120000);
+
+      return () => {
+        clearInterval(mp3Interval);
+        clearInterval(albaranesInterval);
+        clearInterval(ubicacionesInterval);
+        clearInterval(prediccionesInterval);
+      };
     }
-  }, [idWarehouse]);
+  }, [
+    idWarehouse,
+    fetchMp3Data,
+    fetchAlbaranes,
+    fetchUbicaciones,
+    fetchPredicciones,
+  ]);
 
-  // --- Función para predicciones y generación de entidad (sin cambios) ---
-  const fetchPrediccionesAndGenerateEntity = async () => {
-    console.log("Obteniendo predicciones y generando entidad...");
-    try {
-      const response = await fetch("http://localhost:5000/api/predicciones");
-
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const responseText = await response.text();
-        console.error("Respuesta inesperada:", responseText);
-        throw new Error("La respuesta no es un JSON válido");
-      }
-
-      const predicciones = await response.json();
-      if (predicciones && predicciones.length > 0) {
-        const IdMessage = predicciones[0]?.correo_id;
-
-        // Filtrar las predicciones que coincidan con el IDMessage
-        const filteredPredicciones = predicciones.filter(
-          (prediccion) => prediccion.correo_id === IdMessage
-        );
-
-        const entityData = JSON.stringify({
-          CodCompany: "1",
-          IDWorkOrder: "1074241204161431", // Datos de ejemplo
-          IDEmployee: "0222", // ID de empleado
-          IDMessage: IdMessage, // ID de mensaje
-          TextTranscription: JSON.stringify(filteredPredicciones),
-          FileMP3: "base64String", // Aquí deberías poner el audio en base64
-        });
-
-        try {
-          const entityResponse = await generateEntity(entityData);
-          console.log("Entidad generada exitosamente:", entityResponse);
-        } catch (error) {
-          console.error("Error al generar la entidad:", error);
-          setError("Error al generar la entidad: " + error.message);
-        }
-      }
-    } catch (error) {
-      setError("Error al obtener las predicciones: " + error.message);
+  // Función para refrescar manualmente.  Ahora solo llama a las funciones.
+  const refreshData = () => {
+    if (idWarehouse) {
+      fetchMp3Data();
+      fetchAlbaranes();
+      fetchUbicaciones();
+      fetchPredicciones();
     }
   };
 
-  useEffect(() => {
-    // Refresca las predicciones cada 30 segundos
-    fetchPrediccionesAndGenerateEntity();
-    const prediccionesInterval = setInterval(fetchPrediccionesAndGenerateEntity, 30000);
-    return () => clearInterval(prediccionesInterval);
-  }, []);
+  // Función para renderizar la tabla de MP3.
+  const renderMp3Table = () => (
+    <table className="table-flex table-bordered">
+      <thead style={{ backgroundColor: "#222E3C" }}>
+        <tr>
+          <th>Orden de Trabajo</th>
+          <th>Proyecto</th>
+          <th>Empleado</th>
+          <th>Artículos</th>
+          <th>Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        {mp3Ids.length > 0 ? (
+          mp3Ids.map((item, index) => (
+            <tr key={index} className="text-center">
+              <td>{item.IDWorkOrder}</td>
+              <td>{item.DesProject || ""}</td>
+              <td>
+                {capitalizeFirstLetter(item.DesEmployee) || "Empleado"}
+              </td>
+              <td>{item.TextTranscription.length}</td>
+              <td className="justify-content-center">
+                <button
+                  onClick={() => onButtonClick(item.IDMessage)}
+                  className="btn btn-primary"
+                >
+                  Detalles
+                </button>
+              </td>
+            </tr>
+          ))
+        ) : (
+          <tr>
+            <td colSpan="5">No se encontraron datos.</td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  );
 
-  const handleButtonClick = (id) => {
-    onButtonClick(id);
-  };
+  // Función para renderizar la tabla de Albaranes.
+  const renderAlbaranesTable = () => (
+    <table className="table-flex table-bordered">
+      <thead className="align-middle" style={{ backgroundColor: "#222E3C" }}>
+        <tr>
+          <th>Empleado</th>
+          <th>Nº de Albaranes Pendientes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {albaranesData
+          .sort((a, b) => b.Items.length - a.Items.length)
+          .map((item, index) => (
+            <React.Fragment key={index}>
+              <tr
+                className="text-center"
+                onClick={() =>
+                  setSelectedEmployee(
+                    selectedEmployee?.Description === item.Description
+                      ? null
+                      : item
+                  )
+                }
+                style={{ cursor: "pointer" }}
+              >
+                <td>{item.Description}</td>
+                <td>{item.Items.length}</td>
+              </tr>
+              {selectedEmployee?.Description === item.Description && (
+                <tr>
+                  <td colSpan="2">
+                    <div className="child-table mt-2">
+                      <h5>Detalle para: {item.Description}</h5>
+                      <table className="table table-bordered">
+                        <thead style={{ backgroundColor: "#283746" }}>
+                          <tr>
+                            <th>Código de Albarán</th>
+                            <th>Fecha</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {item.Items.map((it, idx) => (
+                            <tr key={idx}>
+                              <td>{it.CodDeliveryNote}</td>
+                              <td>{formatDate(it.DeliveryNoteDate)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>
+          ))}
+      </tbody>
+    </table>
+  );
+
+  // Función para renderizar la tabla de Ubicaciones.
+  const renderUbicacionesTable = () => (
+    <table className="table-flex table-bordered">
+      <thead className="align-middle" style={{ backgroundColor: "#222E3C" }}>
+        <tr>
+          <th>Nº de Albarán</th>
+          <th>Empleado</th>
+          <th>Fecha</th>
+          <th>Nº Artículos</th>
+        </tr>
+      </thead>
+      <tbody>
+        {ubicacionesData.map((item, index) => (
+          <tr key={index}>
+            <td>{item.Item}</td>
+            <td>{item.Description}</td>
+            <td>{item.DateString}</td>
+            <td>{item.NArticles}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 
   return (
     <div>
@@ -232,43 +458,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
                 </h4>
               </div>
               <div className="card-body table-container">
-                <table className="table-flex table-bordered">
-                  <thead style={{ backgroundColor: "#222E3C" }}>
-                    <tr>
-                      <th>Orden de Trabajo</th>
-                      <th>Proyecto</th>
-                      <th>Empleado</th>
-                      <th>Artículos</th>
-                      <th>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mp3Ids.length > 0 ? (
-                      mp3Ids.map((item, index) => (
-                        <tr key={index} className="text-center">
-                          <td>{item.IDWorkOrder}</td>
-                          <td>{item.DesProject || ""}</td>
-                          <td>
-                            {capitalizeFirstLetter(item.DesEmployee) || "Empleado"}
-                          </td>
-                          <td>{item.TextTranscription.length}</td>
-                          <td className="justify-content-center">
-                            <button
-                              onClick={() => handleButtonClick(item.IDMessage)}
-                              className="btn btn-primary"
-                            >
-                              Detalles
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="5">No se encontraron datos.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                {renderMp3Table()}
               </div>
             </div>
           </div>
@@ -282,65 +472,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
                 </h4>
               </div>
               <div className="card-body table-container">
-                <table className="table-flex table-bordered">
-                  <thead className="align-middle" style={{ backgroundColor: "#222E3C" }}>
-                    <tr>
-                      <th>Empleado</th>
-                      <th>Nº de Albaranes Pendientes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {albaranesData
-                      .sort((a, b) => b.Items.length - a.Items.length)
-                      .map((item, index) => (
-                        <React.Fragment key={index}>
-                          <tr
-                            className="text-center"
-                            onClick={() =>
-                              setSelectedEmployee(
-                                selectedEmployee &&
-                                  selectedEmployee.Description === item.Description
-                                  ? null
-                                  : item
-                              )
-                            }
-                            style={{ cursor: "pointer" }}
-                          >
-                            <td>{item.Description}</td>
-                            <td>{item.Items.length}</td>
-                          </tr>
-                          {selectedEmployee &&
-                            selectedEmployee.Description === item.Description && (
-                              <tr>
-                                <td colSpan="2">
-                                  <div className="child-table mt-2">
-                                    <h5>Detalle para: {item.Description}</h5>
-                                    <table className="table table-bordered">
-                                      <thead style={{ backgroundColor: "#283746" }}>
-                                        <tr>
-                                          <th>Código de Albarán</th>
-                                          <th>Fecha</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {item.Items.map((it, idx) => (
-                                          <tr key={idx}>
-                                            <td>{it.CodDeliveryNote}</td>
-                                            <td>
-                                              {new Date(it.DeliveryNoteDate).toLocaleDateString()}
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                        </React.Fragment>
-                      ))}
-                  </tbody>
-                </table>
+                {renderAlbaranesTable()}
               </div>
             </div>
           </div>
@@ -352,28 +484,10 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
                 <h4 className="card-title mb-0" style={{ color: "#222E3C" }}>
                   SGA: Pendientes de Ubicar/Desubicar
                 </h4>
+
               </div>
               <div className="card-body table-container">
-                <table className="table-flex table-bordered">
-                  <thead className="align-middle" style={{ backgroundColor: "#222E3C" }}>
-                    <tr>
-                      <th>Nº de Albarán</th>
-                      <th>Empleado</th>
-                      <th>Fecha</th>
-                      <th>Nº Artículos</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ubicacionesData.map((item, index) => (
-                      <tr key={index}>
-                        <td>{item.Item}</td>
-                        <td>{item.Description}</td>
-                        <td>{item.DateString}</td>
-                        <td>{item.NArticles}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {renderUbicacionesTable()}
               </div>
             </div>
           </div>
