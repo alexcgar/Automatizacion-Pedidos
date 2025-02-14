@@ -8,6 +8,7 @@ import {
   fetchLoginUser,
   authenticate,
   generateEntity,
+  fetchEmployeeInfo,
 } from "../../Services/apiServices";
 import axios from "axios";
 
@@ -103,29 +104,17 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
 
   // Fetch MP3 Data.
   const fetchMp3Data = useCallback(async () => {
-    const data = await apiCallMp3(
-      axios.post,
-      "https://erp.wskserver.com:56544/api/audiomp3toordersl/consult",
-      {
-        CodCompany: "1",
-        CodUser: email,
-        IDMessage: "",
-        IsAll: false,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${await authenticate()}`,
-          "Content-Type": "application/json",
-        },
+    try {
+      const data = await apiCallMp3(fetchEmployeeInfo, "1", email, "");
+      if (data && data.success) {
+        const transformedData = data.data.map((item) => ({
+          ...item,
+          TextTranscription: transformTranscription(item.TextTranscription),
+        }));
+        setMp3Ids(transformedData);
       }
-    );
-
-    if (data && data.data && data.data.success) {
-      const transformedData = data.data.data.map((item) => ({
-        ...item,
-        TextTranscription: transformTranscription(item.TextTranscription),
-      }));
-      setMp3Ids(transformedData);
+    } catch (err) {
+      console.error("Error en fetchMp3Data:", err);
     }
   }, [apiCallMp3, email, transformTranscription]);
 

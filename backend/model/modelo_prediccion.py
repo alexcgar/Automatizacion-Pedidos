@@ -426,6 +426,13 @@ def mostrar_correos_no_leidos():
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
+@app.after_request
+def fix_cors_headers(response):
+    # Asegurarse de que el header tenga un único valor
+    if response.headers.getlist("Access-Control-Allow-Origin"):
+        response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
 @app.route("/api/cargar_csv", methods=["GET"])
 def cargar_csv():
     try:
@@ -603,6 +610,7 @@ def serve_react():
 def not_found(e):
     return send_from_directory(app.static_folder, "index.html")
 
+
 @app.route('/assets/<path:filename>')
 def static_assets(filename):
     if filename.endswith('.js'):
@@ -610,9 +618,15 @@ def static_assets(filename):
     return send_from_directory(app.static_folder + '/assets', filename)
 
 
-
 if __name__ == "__main__":
     inicializar_modelo()
     hilo_actualizador = threading.Thread(target=actualizar_predicciones_periodicamente, daemon=True)
     hilo_actualizador.start()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    
+    try:
+        from waitress import serve
+        # Serve usando Waitress (pip install waitress)
+        serve(app, host="10.83.0.17", port=5000, threads=4)
+    except ImportError:
+        # Si no está instalado waitress, se arranca en modo desarrollo (no recomendado en producción)
+        app.run(host="0.0.0.0", port=5000, debug=False)

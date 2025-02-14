@@ -1,7 +1,4 @@
-
 import axios from 'axios';
-
-
 
 const API_SERVER = 'https://erp.wskserver.com:56544';
 const USERNAME = "apiuser";
@@ -37,18 +34,47 @@ export const authenticate = async () => {
   }
 };
 
+// Crear una instancia de axios con interceptores
+const axiosInstance = axios.create();
+
+// Interceptor de solicitud: agrega el token a cada petición.
+axiosInstance.interceptors.request.use(
+  async (config) => {
+    if (!authToken) {
+      await authenticate();
+    }
+    config.headers.Authorization = `Bearer ${authToken}`;
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Interceptor de respuesta: Si se recibe 401, borra el token, re-autentica y reintenta la solicitud.
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if (error.response && error.response.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      authToken = null;
+      try {
+        await authenticate();
+        originalRequest.headers.Authorization = `Bearer ${authToken}`;
+        return axiosInstance(originalRequest);
+      } catch (authError) {
+        return Promise.reject(authError);
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Ejemplo de uso en las funciones exportadas:
 export const insertAudioMP3ToOrderSL = async (audioData) => {
   try {
-    const token = await authenticate();
-
-    const response = await axios.post(
+    const response = await axiosInstance.post(
       `${API_SERVER}/api/audiomp3toordersl/insert`,
-      audioData,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
+      audioData
     );
 
     if (response.data && response.data.success) {
@@ -62,27 +88,21 @@ export const insertAudioMP3ToOrderSL = async (audioData) => {
   }
 };
 
-
-/**
- * Generar pedido.
- */
 export const generateOrder = async (orderData) => {
   try {
-    const token = await authenticate();
-
-    const response = await axios.post(
+    const response = await axiosInstance.post(
       `${API_SERVER}/api/audiomp3toordersl/generateordersl`,
       orderData,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       }
     );
 
-    console.log('Estado de la respuesta:', response.status); // Registrar el estado de la respuesta
-    console.log('Encabezados de la respuesta:', response.headers); // Registrar los encabezados de la respuesta
-    console.log('Datos de la respuesta:', response.data); // Registrar los datos de la respuesta
+    console.log('Estado de la respuesta:', response.status);
+    console.log('Encabezados de la respuesta:', response.headers);
+    console.log('Datos de la respuesta:', response.data);
 
     if (response.data && response.data.success) {
       return response.data;
@@ -91,21 +111,18 @@ export const generateOrder = async (orderData) => {
     }
   } catch (error) {
     console.error('Error al generar el pedido:', error);
-
     throw error;
   }
 };
 
 export const generateEntity = async (entityData) => {
   try {
-    const token = await authenticate();
-
-    const response = await axios.post(
+    const response = await axiosInstance.post(
       `${API_SERVER}/api/audiomp3toordersl/insert`,
       entityData,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       }
     );
@@ -124,9 +141,7 @@ export const generateEntity = async (entityData) => {
 
 export const fetchLoginUser = async (codCompany, codUser, password) => {
   try {
-    const token = await authenticate();
-
-    const response = await axios.post(
+    const response = await axiosInstance.post(
       `${API_SERVER}/api/User/getbycodv2`,
       {
         CodCompany: codCompany,
@@ -135,7 +150,6 @@ export const fetchLoginUser = async (codCompany, codUser, password) => {
       },
       {
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       }
@@ -147,18 +161,15 @@ export const fetchLoginUser = async (codCompany, codUser, password) => {
       console.error('Respuesta del servidor:', response.data);
       throw new Error('Solicitud fallida: No se pudo obtener la información del usuario.');
     }
-  }
-  catch (error) {
+  } catch (error) {
     console.error('Error al obtener la información del usuario:', error);
     throw error;
   }
-}
+};
 
-export const fetchEmployeeInfo = async (codCompany, codUser, idMessage) => { // Consultar información del empleado entidad
+export const fetchEmployeeInfo = async (codCompany, codUser, idMessage) => {
   try {
-    const token = await authenticate(); // Asumiendo que tienes una función de autenticación que obtiene el token
-
-    const response = await axios.post(
+    const response = await axiosInstance.post(
       `${API_SERVER}/api/audiomp3toordersl/consult`,
       {
         CodCompany: codCompany,
@@ -168,7 +179,6 @@ export const fetchEmployeeInfo = async (codCompany, codUser, idMessage) => { // 
       },
       {
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       }
@@ -188,9 +198,7 @@ export const fetchEmployeeInfo = async (codCompany, codUser, idMessage) => { // 
 
 export const fetchAlbaranesSinFirmar = async (codCompany, idWarehouse) => {
   try {
-    const token = await authenticate();
-
-    const response = await axios.post(
+    const response = await axiosInstance.post(
       `${API_SERVER}/api/ZappStudio/getinfowindow`,
       {
         CodCompany: codCompany,
@@ -198,7 +206,6 @@ export const fetchAlbaranesSinFirmar = async (codCompany, idWarehouse) => {
       },
       {
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       }
@@ -214,13 +221,11 @@ export const fetchAlbaranesSinFirmar = async (codCompany, idWarehouse) => {
     console.error('Error al obtener los albaranes sin firmar:', error);
     throw error;
   }
-}
+};
 
 export const fetchDocumentosSinUbicar = async (codCompany, idWarehouse) => {
   try {
-    const token = await authenticate();
-
-    const response = await axios.post(
+    const response = await axiosInstance.post(
       `${API_SERVER}/api/MySGA/getinfowindow`,
       {
         CodCompany: codCompany,
@@ -228,7 +233,6 @@ export const fetchDocumentosSinUbicar = async (codCompany, idWarehouse) => {
       },
       {
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       }
@@ -238,10 +242,10 @@ export const fetchDocumentosSinUbicar = async (codCompany, idWarehouse) => {
       return response.data.data;
     } else {
       console.error('Respuesta del servidor:', response.data);
-      throw new Error('Solicitud fallida: No se pudieron obtener los albaranes sin firmar.');
+      throw new Error('Solicitud fallida: No se pudieron obtener los documentos.');
     }
   } catch (error) {
     console.error('Error al obtener documentos', error);
     throw error;
   }
-}
+};
