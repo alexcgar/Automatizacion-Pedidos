@@ -22,7 +22,7 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
           "https://erp.wskserver.com:56544/api/audiomp3toordersl/consult",
           {
             CodCompany: "1",
-            CodUser: "juani",
+            CodUser: "",
             IDMessage: idBoton,
             IsAll: false,
           },
@@ -98,7 +98,7 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
       const correoId = entityData[0].TextTranscription[0]?.correo_id;
       if (correoId) {
         try {
-          await axios.post("http://localhost:5000/api/marcar_leido", {
+          await axios.post("http://10.83.0.17:5000/api/marcar_leido", {
             correo_id: correoId,
           });
           console.log(`Correo ${correoId} marcado como leído.`);
@@ -111,7 +111,9 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
       }
 
       // Redirige inmediatamente al Dashboard (salir de Employee)
-      setIsLoggedIn(false);
+      setTimeout(() => {
+        setIsLoggedIn(false);
+      }, 15000);
     } catch (error) {
       console.error("Error al generar el pedido:", error);
       setError("Error al generar el pedido: " + error.message);
@@ -155,7 +157,7 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
             <tr>
               <td>{employeeInfo.DesEmployee}</td>
               <td>{employeeInfo.IDWorkOrder}</td>
-              <td>ALMONDPLUS CINCO SL</td>
+              <td>{employeeInfo.DesCustomer}</td>
               <td>{employeeInfo.DesCustomerDeliveryAddress}</td>
               <td>
                 {employeeInfo.CodProject} {employeeInfo.VersionProject}{" "}

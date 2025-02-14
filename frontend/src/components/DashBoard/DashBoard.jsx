@@ -11,7 +11,7 @@ import {
 } from "../../Services/apiServices";
 import axios from "axios";
 
-const AUDIO_API_URL = "http://localhost:5000/api/getAudio"; //Usa variable de entorno.
+const AUDIO_API_URL = "http://10.83.0.17:5000/api/getAudio"; //Usa variable de entorno.
 
 // Interceptor para manejar errores 401
 axios.interceptors.response.use(
@@ -152,68 +152,79 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
   // Función para obtener el audio en base64
   const fetchAudioBase64 = useCallback(async () => {
     try {
-      const response = await axios.get(AUDIO_API_URL, {
-        responseType: "blob",
-      });
+        const response = await axios.get(AUDIO_API_URL, {
+            responseType: "blob",
+        });
+        
+        // Si la respuesta es un JSON en lugar de un blob, asumimos que no hay audio.
+        const contentType = response.headers["content-type"];
+        if (contentType && contentType.includes("application/json")) {
+            console.debug("No hay audio disponible.");
+            return null;
+        }
 
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(response.data);
-        reader.onloadend = () => {
-          resolve(reader.result.split(",")[1]);
-        };
-        reader.onerror = (error) => reject(error);
-      });
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(response.data);
+            reader.onloadend = () => {
+                resolve(reader.result.split(",")[1]);
+            };
+            reader.onerror = (error) => reject(error);
+        });
     } catch (error) {
-      console.error("Error fetching audio:", error);
-      return null; // Importante retornar null
+        // Si el error es 500, lo tratamos como un caso normal y retornamos null sin loguear el error.
+        if (error?.response?.status !== 500) {
+            console.error("Error fetching audio:", error);
+        }
+        return null;
     }
-  }, []);
+}, []);
 
 
-  const generateEntityFromPredictions = useCallback(async (prediccionesArray) => {
-    const base64Audio = await fetchAudioBase64();
-    if (!base64Audio) {
-      console.error("No se pudo obtener el audio.");
-      return;
+const generateEntityFromPredictions = useCallback(async (prediccionesArray) => {
+  const base64Audio = await fetchAudioBase64();
+  if (!base64Audio) {
+    console.error("No se pudo obtener el audio.");
+    return;
+  }
+
+  // Usamos el correo_id, imagen y datos del audio de la primera predicción (o se podría definir otro criterio)
+  const primeraPrediccion = prediccionesArray.length > 0 ? prediccionesArray[0] : {};
+  const correo_id = primeraPrediccion.correo_id || "";
+  const fileImg = primeraPrediccion.imagen || null;
+  const idWorkOrder =
+    primeraPrediccion.IDWorkOrder ; // valor por defecto
+  const idEmployee = primeraPrediccion.IDEmployee ; // valor por defecto
+
+  const entityData = {
+    CodCompany: "1",
+    IDWorkOrder: idWorkOrder || "0222",
+    IDEmployee: idEmployee || "1074241204161431",
+    IDMessage: correo_id || "Desconocido",
+    // Se envía el arreglo completo de predicciones en formato string JSON
+    TextTranscription: JSON.stringify(prediccionesArray) || "Desconocido",
+    FileMP3: base64Audio || "Desconocido",
+    FileIMG: fileImg || "Desconocido",
+  };
+
+  console.debug("Enviando entidad con datos:", entityData);
+  console.log("Enviando entidad con datos:", entityData);
+
+  try {
+    const entityResponse = await apiCallPredicciones(generateEntity, entityData);
+    if (entityResponse) {
+      console.log("Entidad generada exitosamente:", entityResponse);
+    } else {
+      console.warn("No se obtuvo respuesta para la entidad.");
     }
-
-    // Usamos el correo_id y la imagen de la primera predicción (o se podría definir otro criterio)
-    const correo_id = prediccionesArray.length > 0 ? prediccionesArray[0].correo_id : "";
-    const fileImg =
-      prediccionesArray.length > 0 && prediccionesArray[0].imagen
-        ? prediccionesArray[0].imagen
-        : null;
-
-    const entityData = {
-      CodCompany: "1",
-      IDWorkOrder: "1074241204161431",
-      IDEmployee: "0222",
-      IDMessage: correo_id,
-      // Se envía el arreglo completo de predicciones en formato string JSON
-      TextTranscription: JSON.stringify(prediccionesArray),
-      FileMP3: base64Audio,
-      FileIMG: fileImg,
-    };
-
-    console.debug("Enviando entidad con datos:", entityData);
-    console.log("Enviando entidad con datos:", entityData);
-
-    try {
-      const entityResponse = await apiCallPredicciones(generateEntity, entityData);
-      if (entityResponse) {
-        console.log("Entidad generada exitosamente:", entityResponse);
-      } else {
-        console.warn("No se obtuvo respuesta para la entidad.");
-      }
-    } catch (error) {
-      console.error("Error al generar la entidad:", error);
-    }
-  }, [apiCallPredicciones, fetchAudioBase64]);
+  } catch (error) {
+    console.error("Error al generar la entidad:", error);
+  }
+}, [apiCallPredicciones, fetchAudioBase64]);
 
 
   const fetchPredicciones = useCallback(async () => {
-    const response = await apiCallPredicciones(fetch, "http://localhost:5000/api/predicciones");
+    const response = await apiCallPredicciones(fetch, "http://10.83.0.17:5000/api/predicciones");
     if (!response) return; // Salir si la llamada falla
 
     const contentType = response.headers.get("content-type");

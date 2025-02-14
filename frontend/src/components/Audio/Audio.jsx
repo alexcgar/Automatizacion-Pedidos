@@ -22,7 +22,7 @@ function AudioPlayer({ setAudioBase64 }) {
   useEffect(() => {
     const handleObtenerAudio = () => {
       axios
-        .get("http://localhost:5000/api/getAudio", {
+        .get("http://10.83.0.17:5000/api/getAudio", {
           responseType: "arraybuffer",
         })
         .then((response) => {

@@ -26,6 +26,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 import difflib
 import unicodedata
 
+import logging
+
+# Configuración básica del logging
+logging.basicConfig(level=logging.INFO)
+
 load_dotenv()
 
 CLIENT_ID = os.getenv("CLIENT_ID")
@@ -101,21 +106,31 @@ def procesar_correos():
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
     }
-    filtro_no_leidos = "isRead eq false"
+    # Filtrar correos sin leer y que tengan adjuntos
+    filtro = "isRead eq false and hasAttachments eq true"
     endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/mailFolders/Inbox/messages"
-    params = {"$filter": filtro_no_leidos, "$top": "10"}
+    # Aumentamos el top para traer más correos si es necesario
+    params = {"$filter": filtro, "$expand": "attachments", "$top": "100"}
 
     response = requests.get(endpoint, headers=headers, params=params)
     if response.status_code == 200:
         messages = response.json().get("value", [])
         productos = []
         for message in messages:
+            attachments = message.get("attachments", [])
+            # Solo procesamos el correo si tiene al menos un adjunto mp3
+            tiene_mp3 = any(attachment.get("name", "").lower().endswith(".mp3") for attachment in attachments)
+            if not tiene_mp3:
+                continue
+
+            # Procesar el cuerpo del correo para extraer los productos
             cuerpo = message.get("body", {}).get("content", "")
             correo_id = message.get("id", "")
             if message.get("body", {}).get("contentType", "") == "html":
                 soup = BeautifulSoup(cuerpo, "html.parser")
                 cuerpo = soup.get_text()
             extracted_items = extract_body_message(cuerpo, correo_id)
+            # Imprimir en consola los productos extraídos del correo
             productos.extend(extracted_items)
         return productos
     else:
@@ -123,8 +138,19 @@ def procesar_correos():
 
 def extract_body_message(cuerpo, correo_id):
     try:
+        # Reemplazar comillas simples por dobles para intentar asegurar un JSON válido
         cuerpo = cuerpo.replace("'", '"')
-        mensaje_json = json.loads(cuerpo)
+        try:
+            mensaje_json = json.loads(cuerpo)
+        except json.JSONDecodeError as e:
+            # Si falla, intentar extraer el substring que se parezca a un JSON
+            import re
+            match = re.search(r'(\{.*\})', cuerpo, re.DOTALL)
+            if match:
+                cuerpo_json = match.group(1)
+                mensaje_json = json.loads(cuerpo_json)
+            else:
+                raise e
         if "items" in mensaje_json:
             descriptions = []
             for item in mensaje_json["items"]:
@@ -136,12 +162,38 @@ def extract_body_message(cuerpo, correo_id):
                 quantity = item.get("quantity", "")
                 descriptions.append([combined, quantity, correo_id])
             return descriptions
+        else:
+            return []
+    except json.JSONDecodeError as e:
         return []
-    except json.JSONDecodeError:
+    except Exception as e:
         return []
-    except Exception:
-        return []
+
+def extraer_datos_del_nombre(nombre_archivo: str) -> tuple:
+    """
+    Extrae dos datos importantes del nombre del archivo mp3.
     
+    Se asume que el nombre tiene el formato: dato1 - dato2-resto.mp3
+    (el guion separa los dos datos, pudiendo haber espacios alrededor).
+    
+    Args:
+        nombre_archivo (str): Nombre del archivo.
+    
+    Returns:
+        tuple: (dato1, dato2) o (None, None) si no se cumple el formato.
+    """
+    import os
+    base, _ = os.path.splitext(nombre_archivo)
+    # Separar considerando el guion y eliminar espacios a cada parte
+    partes = [parte.strip() for parte in base.split('-')]
+    print("Partes extraídas del nombre:", partes)
+    if len(partes) >= 2:
+        dato1, dato2 = partes[0], partes[1]
+        # Mostrar los datos extraídos en consola
+        print(f"Datos extraídos: {dato1} y {dato2}")
+        return dato1, dato2
+    return None, None
+
 def descargar_audio_desde_correo(carpeta_destino):
     token = obtener_token()
     headers = {
@@ -149,17 +201,26 @@ def descargar_audio_desde_correo(carpeta_destino):
         "Accept": "application/json",
     }
     endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/mailFolders/Inbox/messages"
-    params = {"$filter": "isRead eq false and hasAttachments eq true", "$expand": "attachments", "$top": "10"}
+    params = {"$filter": "isRead eq false and hasAttachments eq true", "$expand": "attachments", "$top": "50"}
     response = requests.get(endpoint, headers=headers, params=params)
+    audios = []  # Lista para almacenar la info de cada audio
     if response.status_code == 200:
         messages = response.json().get("value", [])
         for message in messages:
+            correo_id = message.get("id", "Sin ID")
             attachments = message.get("attachments", [])
             for attachment in attachments:
                 nombre_archivo = attachment.get("name", "")
                 if nombre_archivo.lower().endswith(".mp3"):
+                    # Extraer y mostrar los datos del nombre
+                    dato1, dato2 = extraer_datos_del_nombre(nombre_archivo)
+                    print(f" Datos extraídos del audio: {dato1}, {dato2}")
+                    
                     attachment_id = attachment.get("id")
-                    adjunto_endpoint = f'https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/messages/{message["id"]}/attachments/{attachment_id}/$value'
+                    adjunto_endpoint = (
+                        f'https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/messages/'
+                        f'{correo_id}/attachments/{attachment_id}/$value'
+                    )
                     adjunto_response = requests.get(adjunto_endpoint, headers=headers)
                     if adjunto_response.status_code == 200:
                         if not os.path.exists(carpeta_destino):
@@ -167,10 +228,14 @@ def descargar_audio_desde_correo(carpeta_destino):
                         ruta_archivo = os.path.join(carpeta_destino, nombre_archivo)
                         with open(ruta_archivo, "wb") as archivo:
                             archivo.write(adjunto_response.content)
-                        return ruta_archivo
+                        audios.append({
+                            "ruta": ruta_archivo,
+                            "IDWorkOrder": dato1,
+                            "IDEmployee": dato2,
+                        })
                     else:
-                        print(f"Error al descargar el adjunto: {adjunto_response.status_code}")
-        return None
+                        logging.error(f"Error al descargar el adjunto: {adjunto_response.status_code}")
+        return audios if audios else None
     else:
         raise Exception(f"Error al obtener correos: {response.status_code} - {response.text}")
 
@@ -187,16 +252,31 @@ def marcar_email_como_leido(email_id):
         print(f"Error al marcar correo como leído: {response.status_code} - {response.text}")
 
 def procesar_texto(texto: str) -> str:
-    texto = str(texto)  # Convertir a cadena en caso de ser otro tipo
+    """
+    Normaliza el texto: reemplaza sinónimos, elimina caracteres especiales y elimina stop words.
+    
+    Args:
+        texto (str): Texto original.
+    
+    Returns:
+        str: Texto procesado.
+    """
+    texto = str(texto)
+    sinonimos = {
+        "pegamento": "adhesivo",
+        "cola": "adhesivo",
+        # Agregar más sinónimos según se requiera.
+    }
+    for palabra, reemplazo in sinonimos.items():
+        texto = re.sub(rf"\b{palabra}\b", reemplazo, texto, flags=re.IGNORECASE)
+    
     texto = texto.lower()
     texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("utf-8")
     texto = re.sub(r"\b(dispensadores)\b", r"dispensador", texto)
     texto = re.sub(r"[^\w\s]", "", texto, flags=re.UNICODE)
     texto = re.sub(r"\b(\w+)(es|s)\b", r"\1", texto)
-    
     palabras = texto.split()
-    texto_procesado = " ".join([palabra for palabra in palabras if palabra not in STOP_WORDS])
-    return texto_procesado
+    return " ".join([palabra for palabra in palabras if palabra not in STOP_WORDS])
 
 def guardar_modelo(modelo, vectorizer, ruta_modelo: str):
     joblib.dump({"model": modelo, "vectorizer": vectorizer}, ruta_modelo)
@@ -315,6 +395,34 @@ def inicializar_modelo():
         guardar_modelo({"model": model, "vectorizer": vectorizer}, None, RUTA_MODELO)
     backup_model(RUTA_MODELO, RUTA_BACKUP)
 
+
+
+def mostrar_correos_no_leidos():
+    """
+    Obtiene y muestra en consola los correos sin leer junto con su contenido.
+    """
+    token = obtener_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+    # Puedes ajustar el filtro según necesites
+    filtro = "isRead eq false"
+    endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/mailFolders/Inbox/messages"
+    params = {"$filter": filtro, "$top": "100"}
+    
+    response = requests.get(endpoint, headers=headers, params=params)
+    if response.status_code == 200:
+        messages = response.json().get("value", [])
+        for message in messages:
+            correo_id = message.get("id", "Sin ID")
+            cuerpo = message.get("body", {}).get("content", "")
+            # Si el contenido es HTML, extraemos solo el texto
+            if message.get("body", {}).get("contentType", "").lower() == "html":
+                cuerpo = BeautifulSoup(cuerpo, "html.parser").get_text()
+    else:
+        print(f"Error al obtener los correos: {response.status_code} - {response.text}")
+
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
@@ -345,107 +453,121 @@ def recibir_seleccion():
 if not os.path.exists(CARPETA_AUDIOS):
     os.makedirs(CARPETA_AUDIOS)
 
+audio_info_global = {}
+
 @app.route("/api/getAudio", methods=["GET"])
 def get_audio():
-    carpeta_destino = r"C:\Users\acaparros\Desktop\F+R\backend\model\audios"
-    ruta_audio = descargar_audio_desde_correo(carpeta_destino)
-    if ruta_audio:
-        try:
-            return send_file(
-                ruta_audio,
-                mimetype="audio/mpeg",
-                as_attachment=True,
-                download_name="audio.mp3",
-            )
-        except Exception as e:
-            return jsonify({"error": "Error al enviar el archivo de audio."}), 500
+    global audio_info_global
+    info_list = descargar_audio_desde_correo(CARPETA_AUDIOS)
+    if info_list and len(info_list) > 0:
+        # Seleccionar el primer audio disponible
+        info = info_list[0]
+        audio_info_global = {
+            "IDWorkOrder": info.get("IDWorkOrder"),
+            "IDEmployee": info.get("IDEmployee"),
+        }
+        return send_file(
+            info.get("ruta"),
+            mimetype="audio/mpeg",
+            as_attachment=True,
+            download_name="audio.mp3",
+        )
     else:
-        return jsonify({"error": "No se encontró ningún archivo de audio para descargar."}), 404
+        return jsonify({"message": "No hay audio disponible."}), 200
 
 predicciones_recientes = []
 historial_predicciones = []
 predicciones_lock = Lock()
 
+def procesar_producto(producto: list) -> dict:
+    """
+    Procesa un producto obtenido de un correo y retorna el diccionario con la predicción.
+    
+    Args:
+        producto (list): [descripcion, cantidad, correo_id].
+    
+    Returns:
+        dict: Diccionario con la predicción y datos asociados.
+    """
+    descripcion, cantidad, correo_id = producto
+    descripcion_procesada = procesar_texto(descripcion)
+    
+    if descripcion_procesada in descripciones_confirmadas:
+        codigo_prediccion = descripciones_confirmadas[descripcion_procesada]
+        exactitud = 100
+    else:
+        resultado_prediccion = modelo_predecir(descripcion)
+        codigo_prediccion = resultado_prediccion.get("codigo_prediccion")
+        if codigo_prediccion in df["CodArticle"].values:
+            descripcion_csv_predicha = df.loc[df["CodArticle"] == codigo_prediccion, "Description_Procesada"].iloc[0]
+            vectorizador_similitud = TfidfVectorizer()
+            tfidf_matrix = vectorizador_similitud.fit_transform([descripcion_procesada, descripcion_csv_predicha])
+            cosine_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+            exactitud = int(min((cosine_sim + 0.15) * 100, 100))
+        else:
+            exactitud = 0
+
+    # Extraer datos del CSV de consulta si existe.
+    if not df_lookup.empty:
+        registros = df_lookup[df_lookup["CodArticle"] == codigo_prediccion]
+        descripcion_csv = registros["Description"].iloc[0] if not registros.empty else "Descripción no encontrada"
+        imagen = ""
+        if not registros.empty and "Image" in registros:
+            imagen_temp = registros["Image"].iloc[0]
+            if pd.isna(imagen_temp):
+                imagen = ""
+            elif isinstance(imagen_temp, str) and (imagen_temp.startswith("b'") or imagen_temp.startswith('b"')):
+                try:
+                    imagen_bytes = ast.literal_eval(imagen_temp)
+                    imagen_base64 = base64.b64encode(imagen_bytes).decode("utf-8")
+                    imagen = imagen_base64
+                except Exception as e:
+                    logging.error("Error al convertir la imagen a base64: %s", e)
+                    imagen = ""
+            else:
+                imagen = imagen_temp
+        id_article_arr = df[df["CodArticle"] == codigo_prediccion]["IDArticle"].values
+        id_article = id_article_arr[0] if len(id_article_arr) > 0 else None
+    else:
+        descripcion_csv = "Descripción no encontrada"
+        imagen = ""
+        id_article = None
+
+    # Incorporar además los datos extraídos del audio.
+    id_work_order = audio_info_global.get("IDWorkOrder") if "audio_info_global" in globals() else None
+    id_employee = audio_info_global.get("IDEmployee") if "audio_info_global" in globals() else None
+
+
+    
+    return {
+        "descripcion": descripcion.upper(),
+        "codigo_prediccion": codigo_prediccion,
+        "descripcion_csv": descripcion_csv,
+        "cantidad": cantidad,
+        "imagen": imagen,
+        "exactitud": exactitud,
+        "id_article": codigo_prediccion if 'id_article' not in locals() else id_article,
+        "correo_id": correo_id,
+        "IDWorkOrder": id_work_order,
+        "IDEmployee": id_employee,
+    }
+
 def actualizar_predicciones_periodicamente():
+    """
+    Actualiza las predicciones de forma periódica procesando correos recibidos.
+    """
     global predicciones_recientes, historial_predicciones
     while True:
         try:
             productos = procesar_correos()
-            nuevas_predicciones = []
-            for producto in productos:
-                # Desempaquetar el producto
-                descripcion = producto[0]
-                cantidad = producto[1]
-                correo_id = producto[2]
-
-                descripcion_procesada = procesar_texto(descripcion)
-
-                if descripcion_procesada in descripciones_confirmadas:
-                    codigo_prediccion = descripciones_confirmadas[descripcion_procesada]
-                    exactitud = 100
-                else:
-                    resultado_prediccion = modelo_predecir(descripcion)
-                    codigo_prediccion = resultado_prediccion.get("codigo_prediccion")
-                    if codigo_prediccion in df["CodArticle"].values:
-                        descripcion_predicha_procesada = df.loc[df["CodArticle"] == codigo_prediccion, "Description_Procesada"].iloc[0]
-                        vectorizador_similitud = TfidfVectorizer()
-                        tfidf_matrix = vectorizador_similitud.fit_transform([descripcion_procesada, descripcion_predicha_procesada])
-                        cosine_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
-                        exactitud = int(min((cosine_sim + 0.35) * 100, 100))
-                    else:
-                        exactitud = 0 
-
-                # Extraer descripción CSV e imagen desde df_lookup (consulta_resultado.csv)
-                if not df_lookup.empty:
-                    arr = df_lookup[df_lookup["CodArticle"] == codigo_prediccion]["Description"].values
-                    descripcion_csv = arr[0] if len(arr) > 0 else "Descripción no encontrada"
-                    
-                    arr_img = df_lookup[df_lookup["CodArticle"] == codigo_prediccion]["Image"].values
-                    if len(arr_img) > 0:
-                        imagen_temp = arr_img[0]
-                        if pd.isna(imagen_temp):
-                            imagen = ""
-                        else:
-                            if isinstance(imagen_temp, str) and (imagen_temp.startswith("b'") or imagen_temp.startswith('b"')):
-                                try:
-                                    imagen_bytes = ast.literal_eval(imagen_temp)
-                                    imagen_base64 = base64.b64encode(imagen_bytes).decode("utf-8")
-                                    imagen = f"{imagen_base64}"
-                                except Exception as e:
-                                    print("Error al convertir la imagen a base64:", e)
-                                    imagen = ""
-                            else:
-                                imagen = imagen_temp
-                    else:
-                        imagen = ""
-                    id_article_arr = df[df["CodArticle"] == codigo_prediccion]["IDArticle"].values
-                    id_article = id_article_arr[0] if len(id_article_arr) > 0 else None
-                else:
-                    descripcion_csv = "Descripción no encontrada"
-                    imagen = ""
-                    id_article = None
-
-                # Log: muestra el producto recibido (correo), el producto usado para predecir (procesado)
-                # y la predicción final (código y descripción CSV)
-                # print(f"Correo: '{descripcion}' | Procesado: '{descripcion_procesada}' | Predicción: Código: {codigo_prediccion}, Desc: '{descripcion_csv}'")
-
-                nuevas_predicciones.append({
-                    "descripcion": descripcion.upper(),
-                    "codigo_prediccion": codigo_prediccion,
-                    "descripcion_csv": descripcion_csv,
-                    "cantidad": cantidad,
-                    "imagen": imagen,
-                    "exactitud": exactitud,
-                    "id_article": codigo_prediccion if 'id_article' not in locals() else id_article,
-                    "correo_id": correo_id,
-                })
-
+            mostrar_correos_no_leidos()
+            nuevas_predicciones = [procesar_producto(producto) for producto in productos]
             with predicciones_lock:
                 predicciones_recientes.clear()
                 predicciones_recientes.extend(nuevas_predicciones)
                 historial_predicciones.extend(nuevas_predicciones)
         except Exception as e:
-            print(f"Error actualizando predicciones: {e}")
+            logging.error("Error actualizando predicciones: %s", e)
         time.sleep(10)
 
 
@@ -463,12 +585,15 @@ def marcar_correo_leido():
 
 @app.route("/api/predicciones", methods=["GET"])
 def obtener_predicciones():
-    global predicciones_recientes
+    global predicciones_recientes, audio_info_global
     with predicciones_lock:
-        if not predicciones_recientes:
-            return jsonify({"message": "No se encontraron predicciones", "predicciones": []}), 200
-        
-        return jsonify(predicciones_recientes), 200
+        predicciones = predicciones_recientes.copy()
+    # Si existe audio info, lo incorporamos a cada predicción.
+    if audio_info_global:
+        for pred in predicciones:
+            pred["IDWorkOrder"] = audio_info_global.get("IDWorkOrder")
+            pred["IDEmployee"] = audio_info_global.get("IDEmployee")
+    return jsonify(predicciones), 200
 
 @app.route("/")
 def serve_react():
@@ -483,6 +608,8 @@ def static_assets(filename):
     if filename.endswith('.js'):
         return send_from_directory(app.static_folder + '/assets', filename, mimetype='application/javascript')
     return send_from_directory(app.static_folder + '/assets', filename)
+
+
 
 if __name__ == "__main__":
     inicializar_modelo()
