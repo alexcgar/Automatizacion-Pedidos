@@ -423,8 +423,10 @@ def mostrar_correos_no_leidos():
     else:
         print(f"Error al obtener los correos: {response.status_code} - {response.text}")
 
+
 app = Flask(__name__, static_folder='static')
 CORS(app)
+
 
 @app.after_request
 def fix_cors_headers(response):
@@ -432,6 +434,7 @@ def fix_cors_headers(response):
     if response.headers.getlist("Access-Control-Allow-Origin"):
         response.headers["Access-Control-Allow-Origin"] = "*"
     return response
+
 
 @app.route("/api/cargar_csv", methods=["GET"])
 def cargar_csv():
@@ -441,6 +444,7 @@ def cargar_csv():
         return jsonify({"data": datos_csv}), 200
     except Exception as e:
         return jsonify({"error": f"No se pudo cargar el archivo CSV: {str(e)}"}), 500
+
 
 @app.route("/api/send-seleccion", methods=["POST"])
 def recibir_seleccion():
@@ -460,7 +464,9 @@ def recibir_seleccion():
 if not os.path.exists(CARPETA_AUDIOS):
     os.makedirs(CARPETA_AUDIOS)
 
+
 audio_info_global = {}
+
 
 @app.route("/api/getAudio", methods=["GET"])
 def get_audio():
@@ -485,6 +491,7 @@ def get_audio():
 predicciones_recientes = []
 historial_predicciones = []
 predicciones_lock = Lock()
+
 
 def procesar_producto(producto: list) -> dict:
     """
@@ -626,7 +633,7 @@ if __name__ == "__main__":
     try:
         from waitress import serve
         # Serve usando Waitress (pip install waitress)
-        serve(app, host="10.83.0.17", port=5000, threads=4)
+        serve(app, host="127.0.0.1", port=5000, threads=4)
     except ImportError:
         # Si no está instalado waitress, se arranca en modo desarrollo (no recomendado en producción)
         app.run(host="0.0.0.0", port=5000, debug=False)
