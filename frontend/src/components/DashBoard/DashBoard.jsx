@@ -106,13 +106,29 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
   const fetchMp3Data = useCallback(async () => {
     try {
       const data = await apiCallMp3(fetchEmployeeInfo, "1", email, "");
-      if (data && data.success) {
-        const transformedData = data.data.map((item) => ({
-          ...item,
-          TextTranscription: transformTranscription(item.TextTranscription),
-        }));
-        setMp3Ids(transformedData);
+      let transformedData = [];
+      if (Array.isArray(data)) {
+        transformedData = data.map((item) => {
+          const parsedText = transformTranscription(item.TextTranscription);
+          return {
+            ...item,
+            TextTranscription: parsedText,
+          };
+        });
+      } else if (data && data.success) {
+        transformedData = data.data.map((item) => {
+          const parsedText = transformTranscription(item.TextTranscription);
+          console.log("Parsed TextTranscription para item (obj):", parsedText);
+          return {
+            ...item,
+            TextTranscription: parsedText,
+          };
+        });
+      } else {
+        console.warn("La respuesta no cumple el formato esperado:", data);
+        return;
       }
+      setMp3Ids(transformedData);
     } catch (err) {
       console.error("Error en fetchMp3Data:", err);
     }
@@ -197,19 +213,19 @@ const generateEntityFromPredictions = useCallback(async (prediccionesArray) => {
   };
 
   console.debug("Enviando entidad con datos:", entityData);
-  console.log("Enviando entidad con datos:", entityData);
 
   try {
     const entityResponse = await apiCallPredicciones(generateEntity, entityData);
     if (entityResponse) {
-      console.log("Entidad generada exitosamente:", entityResponse);
+      // Refrescar los datos llamando a fetchMp3Data para que se actualice la tabla
+      fetchMp3Data();
     } else {
       console.warn("No se obtuvo respuesta para la entidad.");
     }
   } catch (error) {
     console.error("Error al generar la entidad:", error);
   }
-}, [apiCallPredicciones, fetchAudioBase64]);
+}, [apiCallPredicciones, fetchAudioBase64, fetchMp3Data]);
 
 
   const fetchPredicciones = useCallback(async () => {
@@ -229,7 +245,6 @@ const generateEntityFromPredictions = useCallback(async (prediccionesArray) => {
       // Reemplaza NaN por null para evitar errores de parseo
       responseText = responseText.replace(/\bNaN\b/g, "null");
       parsedResponse = JSON.parse(responseText);
-      console.log("Predicciones recibidas:", parsedResponse);
     } catch (error) {
       console.error("Error al parsear predicciones:", error);
       return;
@@ -311,8 +326,9 @@ const generateEntityFromPredictions = useCallback(async (prediccionesArray) => {
     }
   };
 
-  // Función para renderizar la tabla de MP3.
-  const renderMp3Table = () => (
+  // Función para renderizar la tabla de MP3 con logs
+const renderMp3Table = () => {
+  return (
     <table className="table-flex table-bordered">
       <thead style={{ backgroundColor: "#222E3C" }}>
         <tr>
@@ -325,24 +341,28 @@ const generateEntityFromPredictions = useCallback(async (prediccionesArray) => {
       </thead>
       <tbody>
         {mp3Ids.length > 0 ? (
-          mp3Ids.map((item, index) => (
-            <tr key={index} className="text-center">
-              <td>{item.IDWorkOrder}</td>
-              <td>{item.DesProject || ""}</td>
-              <td>
-                {capitalizeFirstLetter(item.DesEmployee) || "Empleado"}
-              </td>
-              <td>{item.TextTranscription.length}</td>
-              <td className="justify-content-center">
-                <button
-                  onClick={() => onButtonClick(item.IDMessage)}
-                  className="btn btn-primary"
-                >
-                  Detalles
-                </button>
-              </td>
-            </tr>
-          ))
+          mp3Ids.map((item, index) => {
+            return (
+              <tr key={index} className="text-center">
+                <td>{item.IDWorkOrder}</td>
+                <td>{item.DesProject || ""}</td>
+                <td>{capitalizeFirstLetter(item.DesEmployee) || "Empleado"}</td>
+                <td>
+                  {Array.isArray(item.TextTranscription)
+                    ? item.TextTranscription.length
+                    : 0}
+                </td>
+                <td className="justify-content-center">
+                  <button
+                    onClick={() => onButtonClick(item.IDMessage)}
+                    className="btn btn-primary"
+                  >
+                    Detalles
+                  </button>
+                </td>
+              </tr>
+            );
+          })
         ) : (
           <tr>
             <td colSpan="5">No se encontraron datos.</td>
@@ -351,6 +371,7 @@ const generateEntityFromPredictions = useCallback(async (prediccionesArray) => {
       </tbody>
     </table>
   );
+};
 
   // Función para renderizar la tabla de Albaranes.
   const renderAlbaranesTable = () => (

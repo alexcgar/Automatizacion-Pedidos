@@ -633,7 +633,7 @@ if __name__ == "__main__":
     try:
         from waitress import serve
         # Serve usando Waitress (pip install waitress)
-        serve(app, host="127.0.0.1", port=5000, threads=4)
+        serve(app, host="127.0.0.1", port=5000, threads=1)
     except ImportError:
         # Si no está instalado waitress, se arranca en modo desarrollo (no recomendado en producción)
         app.run(host="0.0.0.0", port=5000, debug=False)
