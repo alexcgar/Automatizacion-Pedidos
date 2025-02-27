@@ -106,53 +106,65 @@ def procesar_correos():
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
     }
-    # Filtrar correos sin leer y que tengan adjuntos
     filtro = "isRead eq false and hasAttachments eq true"
     endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/mailFolders/Inbox/messages"
-    # Aumentamos el top para traer más correos si es necesario
     params = {"$filter": filtro, "$expand": "attachments", "$top": "100"}
 
     response = requests.get(endpoint, headers=headers, params=params)
     if response.status_code == 200:
         messages = response.json().get("value", [])
         productos = []
+        audios = descargar_audio_desde_correo(CARPETA_AUDIOS) or []
+        audio_dict = {audio["correo_id"]: audio for audio in audios}
+        logging.info(f"Encontrados {len(messages)} correos no leídos con adjuntos para procesar.")
         for message in messages:
+            correo_id = message.get("id", "Sin ID")
             attachments = message.get("attachments", [])
-            # Solo procesamos el correo si tiene al menos un adjunto mp3
-            tiene_mp3 = any(attachment.get("name", "").lower().endswith(".mp3") for attachment in attachments)
-            if not tiene_mp3:
+            tiene_audio = any(attachment.get("name", "").lower().endswith((".mp3", ".mp4")) for attachment in attachments)
+            if not tiene_audio:
+                logging.info(f"Correo {correo_id} ignorado: no contiene adjuntos MP3/MP4.")
                 continue
 
-            # Procesar el cuerpo del correo para extraer los productos
             cuerpo = message.get("body", {}).get("content", "")
-            correo_id = message.get("id", "")
+            logging.info(f"Procesando correo {correo_id}, cuerpo (primeros 200 caracteres): {cuerpo[:200]}...")
             if message.get("body", {}).get("contentType", "") == "html":
                 soup = BeautifulSoup(cuerpo, "html.parser")
                 cuerpo = soup.get_text()
             extracted_items = extract_body_message(cuerpo, correo_id)
-            # Imprimir en consola los productos extraídos del correo
+            for item in extracted_items:
+                audio_info = audio_dict.get(correo_id, {})
+                item.append(audio_info.get("audio_base64", ""))  # Audio base64
+                item.append(audio_info.get("IDWorkOrder", None))
+                item.append(audio_info.get("IDEmployee", None))
+                item.append(audio_info.get("nombre", ""))  # Nombre del archivo original
             productos.extend(extracted_items)
+        logging.info(f"Procesamiento completado, total de productos extraídos: {len(productos)}.")
         return productos
     else:
+        logging.error(f"Error al obtener los correos: {response.status_code} - {response.text}")
         raise Exception(f"Error al obtener los correos: {response.status_code} - {response.text}")
 
 def extract_body_message(cuerpo, correo_id):
     try:
-        # Reemplazar comillas simples por dobles para intentar asegurar un JSON válido
+        logging.info(f"Intentando parsear JSON del correo {correo_id}, cuerpo (primeros 200): {cuerpo[:200]}...")
         cuerpo = cuerpo.replace("'", '"')
         try:
             mensaje_json = json.loads(cuerpo)
+            logging.info(f"JSON parseado exitosamente para correo {correo_id}: {mensaje_json}")
         except json.JSONDecodeError as e:
-            # Si falla, intentar extraer el substring que se parezca a un JSON
-            import re
+            logging.warning(f"Error inicial parseando JSON en correo {correo_id}: {e}")
             match = re.search(r'(\{.*\})', cuerpo, re.DOTALL)
             if match:
                 cuerpo_json = match.group(1)
+                logging.info(f"Substring JSON extraído para correo {correo_id}: {cuerpo_json[:200]}...")
                 mensaje_json = json.loads(cuerpo_json)
+                logging.info(f"JSON parseado del substring para correo {correo_id}: {mensaje_json}")
             else:
+                logging.error(f"No se pudo extraer JSON válido en correo {correo_id}: {e}")
                 raise e
         if "items" in mensaje_json:
             descriptions = []
+            logging.info(f"Items encontrados en correo {correo_id}: {len(mensaje_json['items'])}")
             for item in mensaje_json["items"]:
                 producto = item.get("product", "")
                 size = item.get("size", "")
@@ -161,19 +173,23 @@ def extract_body_message(cuerpo, correo_id):
                 combined = f"{producto} {size}".strip()
                 quantity = item.get("quantity", "")
                 descriptions.append([combined, quantity, correo_id])
+                logging.info(f"Producto extraído del correo {correo_id}: Descripción '{combined}', Cantidad '{quantity}'")
             return descriptions
         else:
+            logging.warning(f"No se encontraron 'items' en el JSON del correo {correo_id}")
             return []
     except json.JSONDecodeError as e:
+        logging.error(f"Error final parseando JSON en correo {correo_id}: {e}")
         return []
     except Exception as e:
+        logging.error(f"Error general procesando correo {correo_id}: {e}")
         return []
 
 def extraer_datos_del_nombre(nombre_archivo: str) -> tuple:
     """
-    Extrae dos datos importantes del nombre del archivo mp3.
+    Extrae dos datos importantes del nombre del archivo mp4.
     
-    Se asume que el nombre tiene el formato: dato1 - dato2-resto.mp3
+    Se asume que el nombre tiene el formato: dato1 - dato2-resto.mp4
     (el guion separa los dos datos, pudiendo haber espacios alrededor).
     
     Args:
@@ -184,14 +200,12 @@ def extraer_datos_del_nombre(nombre_archivo: str) -> tuple:
     """
     import os
     base, _ = os.path.splitext(nombre_archivo)
-    # Separar considerando el guion y eliminar espacios a cada parte
-    partes = [parte.strip() for parte in base.split('-')]
-    print("Partes extraídas del nombre:", partes)
+    partes = [parte.strip() for parte in base.split('_')]
     if len(partes) >= 2:
         dato1, dato2 = partes[0], partes[1]
-        # Mostrar los datos extraídos en consola
-        print(f"Datos extraídos: {dato1} y {dato2}")
+        logging.info(f"Datos extraídos del audio {nombre_archivo}: IDWorkOrder={dato1}, IDEmployee={dato2}")
         return dato1, dato2
+    logging.warning(f"Formato de nombre inválido para {nombre_archivo}, no se extrajeron datos.")
     return None, None
 
 def descargar_audio_desde_correo(carpeta_destino):
@@ -203,40 +217,38 @@ def descargar_audio_desde_correo(carpeta_destino):
     endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/mailFolders/Inbox/messages"
     params = {"$filter": "isRead eq false and hasAttachments eq true", "$expand": "attachments", "$top": "50"}
     response = requests.get(endpoint, headers=headers, params=params)
-    audios = []  # Lista para almacenar la info de cada audio
+    audios = []
     if response.status_code == 200:
         messages = response.json().get("value", [])
+        logging.info(f"Encontrados {len(messages)} correos no leídos con adjuntos para descargar audios.")
         for message in messages:
             correo_id = message.get("id", "Sin ID")
             attachments = message.get("attachments", [])
             for attachment in attachments:
                 nombre_archivo = attachment.get("name", "")
-                if nombre_archivo.lower().endswith(".mp3"):
-                    # Extraer y mostrar los datos del nombre
+                if nombre_archivo.lower().endswith((".mp3", ".mp4")):  # Soporte para mp3 y mp4
+                    logging.info(f"Procesando archivo de audio del correo {correo_id}: {nombre_archivo}")
                     dato1, dato2 = extraer_datos_del_nombre(nombre_archivo)
-                    print(f" Datos extraídos del audio: {dato1}, {dato2}")
-                    
                     attachment_id = attachment.get("id")
-                    adjunto_endpoint = (
-                        f'https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/messages/'
-                        f'{correo_id}/attachments/{attachment_id}/$value'
-                    )
+                    adjunto_endpoint = f'https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/messages/{correo_id}/attachments/{attachment_id}/$value'
                     adjunto_response = requests.get(adjunto_endpoint, headers=headers)
                     if adjunto_response.status_code == 200:
-                        if not os.path.exists(carpeta_destino):
-                            os.makedirs(carpeta_destino)
-                        ruta_archivo = os.path.join(carpeta_destino, nombre_archivo)
-                        with open(ruta_archivo, "wb") as archivo:
-                            archivo.write(adjunto_response.content)
+                        audio_content = adjunto_response.content
+                        audio_base64 = base64.b64encode(audio_content).decode("utf-8")
                         audios.append({
-                            "ruta": ruta_archivo,
+                            "nombre": nombre_archivo,  # Guardamos el nombre completo del archivo
                             "IDWorkOrder": dato1,
                             "IDEmployee": dato2,
+                            "audio_base64": audio_base64,
+                            "correo_id": correo_id
                         })
+                        logging.info(f"Audio procesado en base64 para {nombre_archivo}, tamaño: {len(audio_base64)} caracteres")
                     else:
-                        logging.error(f"Error al descargar el adjunto: {adjunto_response.status_code}")
+                        logging.error(f"Error al obtener el audio {nombre_archivo}: {adjunto_response.status_code}")
+        logging.info(f"Descarga completada, total de audios procesados: {len(audios)}")
         return audios if audios else None
     else:
+        logging.error(f"Error al obtener correos para audios: {response.status_code} - {response.text}")
         raise Exception(f"Error al obtener correos: {response.status_code} - {response.text}")
 
 def marcar_email_como_leido(email_id):
@@ -483,7 +495,7 @@ def get_audio():
             info.get("ruta"),
             mimetype="audio/mpeg",
             as_attachment=True,
-            download_name="audio.mp3",
+            download_name="audio.mp4",
         )
     else:
         return jsonify({"message": "No hay audio disponible."}), 200
@@ -494,17 +506,9 @@ predicciones_lock = Lock()
 
 
 def procesar_producto(producto: list) -> dict:
-    """
-    Procesa un producto obtenido de un correo y retorna el diccionario con la predicción.
-    
-    Args:
-        producto (list): [descripcion, cantidad, correo_id].
-    
-    Returns:
-        dict: Diccionario con la predicción y datos asociados.
-    """
-    descripcion, cantidad, correo_id = producto
+    descripcion, cantidad, correo_id, audio_base64, id_work_order, id_employee, file_name_original = producto
     descripcion_procesada = procesar_texto(descripcion)
+    logging.info(f"Procesando producto del correo {correo_id}: Descripción original '{descripcion}', Procesada '{descripcion_procesada}'")
     
     if descripcion_procesada in descripciones_confirmadas:
         codigo_prediccion = descripciones_confirmadas[descripcion_procesada]
@@ -521,7 +525,6 @@ def procesar_producto(producto: list) -> dict:
         else:
             exactitud = 0
 
-    # Extraer datos del CSV de consulta si existe.
     if not df_lookup.empty:
         registros = df_lookup[df_lookup["CodArticle"] == codigo_prediccion]
         descripcion_csv = registros["Description"].iloc[0] if not registros.empty else "Descripción no encontrada"
@@ -547,13 +550,14 @@ def procesar_producto(producto: list) -> dict:
         imagen = ""
         id_article = None
 
-    # Incorporar además los datos extraídos del audio.
-    id_work_order = audio_info_global.get("IDWorkOrder") if "audio_info_global" in globals() else None
-    id_employee = audio_info_global.get("IDEmployee") if "audio_info_global" in globals() else None
+    # Detectar el formato del audio dinámicamente
+    formato_audio = "mp4"  # Valor por defecto
+    if file_name_original:
+        _, extension = os.path.splitext(file_name_original)
+        formato_audio = extension.lstrip(".").lower() if extension else "mp4"
+    logging.info(f"Formato de audio detectado: {formato_audio}")
 
-
-    
-    return {
+    resultado = {
         "descripcion": descripcion.upper(),
         "codigo_prediccion": codigo_prediccion,
         "descripcion_csv": descripcion_csv,
@@ -564,7 +568,10 @@ def procesar_producto(producto: list) -> dict:
         "correo_id": correo_id,
         "IDWorkOrder": id_work_order,
         "IDEmployee": id_employee,
+        "audio_base64": audio_base64,
+        "file_name": f"{id_work_order}_{id_employee}_{formato_audio}"
     }
+    return resultado
 
 def actualizar_predicciones_periodicamente():
     """
@@ -582,7 +589,7 @@ def actualizar_predicciones_periodicamente():
                 historial_predicciones.extend(nuevas_predicciones)
         except Exception as e:
             logging.error("Error actualizando predicciones: %s", e)
-        time.sleep(10)
+        time.sleep(60)
 
 
 @app.route("/api/marcar_leido", methods=["POST"])
@@ -599,14 +606,10 @@ def marcar_correo_leido():
 
 @app.route("/api/predicciones", methods=["GET"])
 def obtener_predicciones():
-    global predicciones_recientes, audio_info_global
+    global predicciones_recientes
     with predicciones_lock:
         predicciones = predicciones_recientes.copy()
-    # Si existe audio info, lo incorporamos a cada predicción.
-    if audio_info_global:
-        for pred in predicciones:
-            pred["IDWorkOrder"] = audio_info_global.get("IDWorkOrder")
-            pred["IDEmployee"] = audio_info_global.get("IDEmployee")
+    logging.info(f"Enviando {len(predicciones)} predicciones a la API, incluyendo audio_base64")
     return jsonify(predicciones), 200
 
 @app.route("/")
@@ -633,7 +636,7 @@ if __name__ == "__main__":
     try:
         from waitress import serve
         # Serve usando Waitress (pip install waitress)
-        serve(app, host="127.0.0.1", port=5000, threads=1)
+        serve(app, host="10.83.0.17", port=5000, threads=1)
     except ImportError:
         # Si no está instalado waitress, se arranca en modo desarrollo (no recomendado en producción)
         app.run(host="0.0.0.0", port=5000, debug=False)

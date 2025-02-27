@@ -3,30 +3,25 @@
 }
 
 .table-flex th, .table-flex td {
-    padding: .5rem;  
+    padding: .4rem;  
 }
 
 .table-flex th {
-    font-size: 18px;
-    font-weight: 200;
+    font-size: 15px;
+    font-weight: 400;
     color: #fff;
 }
 
 .table-flex td {
-    font-size: 17px; 
+    font-size: 13px; 
 }
 
 .table-flex tr {
-    font-size: 17px;
+    font-size: 19px;
 }
 
-.card-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-
 .table-container {
-    max-height: calc(100vh - 230px); /* Ajusta el valor según lo necesites */
+    max-height: calc(100vh - 625px); /* Ajusta el valor según lo necesites */
+    min-height: 355px; /* Puedes ajustar este valor según necesites */
     overflow-y: auto;
 }

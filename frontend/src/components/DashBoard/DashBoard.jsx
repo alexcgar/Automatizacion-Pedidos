@@ -9,10 +9,9 @@ import {
   authenticate,
   generateEntity,
   fetchEmployeeInfo,
+  fetchPartesSinFirmar,
 } from "../../Services/apiServices";
 import axios from "axios";
-
-const AUDIO_API_URL = "http://10.83.0.17:5000/api/getAudio"; //Usa variable de entorno.
 
 // Interceptor para manejar errores 401
 axios.interceptors.response.use(
@@ -21,13 +20,11 @@ axios.interceptors.response.use(
     if (error.response && error.response.status === 401) {
       console.warn("Token expirado o no autorizado. Se intentará reautenticar...");
       try {
-        const newToken = await authenticate(); // Implementa la lógica de refresco/re autenticación
-        // Actualiza el header de autorización en la configuración original
+        const newToken = await authenticate();
         error.config.headers["Authorization"] = `Bearer ${newToken}`;
-        // Reintenta la petición con el nuevo token
         return axios.request(error.config);
       } catch (authError) {
-        console.error("Error al re autenticarse:", authError);
+        console.warn("Error al re autenticarse:", authError);
         return Promise.reject(error);
       }
     }
@@ -35,18 +32,17 @@ axios.interceptors.response.use(
   }
 );
 
+// Función para capitalizar la primera letra de palabras
 const capitalizeFirstLetter = (str) => {
-  return str?.replace(/\w\S*/g, function (txt) {
-    return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
-  });
+  return str?.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
 };
 
-// Función para formatear fechas.
+// Función para formatear fechas
 const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString();
 };
 
-// Funcion para manejar llamadas a la API.
+// Hook para manejar llamadas a la API
 const useApiCall = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -58,11 +54,10 @@ const useApiCall = () => {
       const data = await apiFunction(...args);
       return data;
     } catch (err) {
-      const errorMessage =
-        err.response?.data?.message || err.message || "Error desconocido";
+      const errorMessage = err.response?.data?.message || err.message || "Error desconocido";
       setError(errorMessage);
-      console.error("Error en la llamada a la API:", err);
-      return null; // Importante retornar null en caso de error
+      console.warn("Error en la llamada a la API:", err);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -77,64 +72,82 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
   const [ubicacionesData, setUbicacionesData] = useState([]);
   const [mp3Ids, setMp3Ids] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [partesData, setPartesData] = useState([]);
 
-  const {
-    apiCall: apiCallAlbaranes,
-  } = useApiCall();
-  const {
-    apiCall: apiCallUbicaciones,
-  } = useApiCall();
-  const {
-    apiCall: apiCallMp3,
-  } = useApiCall();
+  const { apiCall: apiCallAlbaranes } = useApiCall();
+  const { apiCall: apiCallUbicaciones } = useApiCall();
+  const { apiCall: apiCallMp3 } = useApiCall();
   const { apiCall: apiCallPredicciones } = useApiCall();
+  const { apiCall: apiCallPartes } = useApiCall();
 
-
-  // Transforma la transcripción.
+  // Transforma la transcripción
   const transformTranscription = useCallback((transcription) => {
     try {
-      return transcription.startsWith("[")
-        ? JSON.parse(transcription)
-        : transcription;
+      return transcription.startsWith("[") ? JSON.parse(transcription) : transcription;
     } catch (error) {
-      console.error("Error parsing transcription:", error);
-      return transcription; // Devuelve original si falla el parseo.
+      console.warn("Error al parsear transcripción:", error);
+      return transcription;
     }
   }, []);
 
-  // Fetch MP3 Data.
+  // Nueva función para marcar el correo como leído
+  const marcarCorreoComoLeido = async (correoId) => {
+    try {
+      const response = await axios.post(
+        "http://10.83.0.17:5000/api/marcar_leido",
+        { correo_id: correoId },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      if (response.status === 200) {
+        console.log(`Correo ${correoId} marcado como leído exitosamente.`);
+      } else {
+        console.warn(`No se pudo marcar el correo ${correoId} como leído:`, response.data);
+      }
+    } catch (error) {
+      console.warn("Error al marcar el correo como leído:", error);
+    }
+  };
+
+  const fetchPartes = useCallback(async () => {
+    if (idWarehouse) {
+      const data = await apiCallPartes(fetchPartesSinFirmar, "1", idWarehouse);
+      if (data) {
+        setPartesData(data);
+      }
+    }
+  }, [idWarehouse, apiCallPartes]);
+
+  // Fetch de datos MP3
   const fetchMp3Data = useCallback(async () => {
     try {
       const data = await apiCallMp3(fetchEmployeeInfo, "1", email, "");
       let transformedData = [];
       if (Array.isArray(data)) {
-        transformedData = data.map((item) => {
-          const parsedText = transformTranscription(item.TextTranscription);
-          return {
-            ...item,
-            TextTranscription: parsedText,
-          };
-        });
+        transformedData = data.map((item) => ({
+          ...item,
+          TextTranscription: transformTranscription(item.TextTranscription),
+        }));
       } else if (data && data.success) {
-        transformedData = data.data.map((item) => {
-          const parsedText = transformTranscription(item.TextTranscription);
-          console.log("Parsed TextTranscription para item (obj):", parsedText);
-          return {
-            ...item,
-            TextTranscription: parsedText,
-          };
-        });
+        transformedData = data.data.map((item) => ({
+          ...item,
+          TextTranscription: transformTranscription(item.TextTranscription),
+        }));
       } else {
-        console.warn("La respuesta no cumple el formato esperado:", data);
+        console.warn("Respuesta no válida en fetchMp3Data:", data);
         return;
       }
+      console.log("Datos MP3 transformados:", transformedData);
       setMp3Ids(transformedData);
     } catch (err) {
-      console.error("Error en fetchMp3Data:", err);
+      console.warn("Error en fetchMp3Data:", err);
     }
   }, [apiCallMp3, email, transformTranscription]);
 
-  // Fetch Albaranes.
+  // Fetch de albaranes
   const fetchAlbaranes = useCallback(async () => {
     if (idWarehouse) {
       const data = await apiCallAlbaranes(fetchAlbaranesSinFirmar, "1", idWarehouse);
@@ -144,169 +157,159 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
     }
   }, [apiCallAlbaranes, idWarehouse]);
 
-  // Fetch Ubicaciones.
+  // Fetch de ubicaciones
   const fetchUbicaciones = useCallback(async () => {
     if (idWarehouse) {
       const data = await apiCallUbicaciones(fetchDocumentosSinUbicar, "1", idWarehouse);
       if (data) {
+        console.log("Ubicaciones obtenidas:", data);
         setUbicacionesData(data);
       }
     }
   }, [apiCallUbicaciones, idWarehouse]);
 
-  // Función para obtener el audio en base64
-  const fetchAudioBase64 = useCallback(async () => {
-    try {
-        const response = await axios.get(AUDIO_API_URL, {
-            responseType: "blob",
-        });
-        
-        // Si la respuesta es un JSON en lugar de un blob, asumimos que no hay audio.
-        const contentType = response.headers["content-type"];
-        if (contentType && contentType.includes("application/json")) {
-            console.debug("No hay audio disponible.");
-            return null;
+  const generateEntityFromPredictions = useCallback(
+    async (prediccionesArray) => {
+      for (const prediccion of prediccionesArray) {
+        const {
+          audio_base64,
+          correo_id,
+          imagen,
+          IDWorkOrder,
+          IDEmployee,
+          descripcion,
+          codigo_prediccion,
+          descripcion_csv,
+          cantidad,
+          exactitud,
+          id_article,
+          file_name,
+        } = prediccion;
+
+        if (!audio_base64) {
+          console.warn("No se encontró audio_base64 en la predicción:", prediccion);
+          continue;
         }
 
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(response.data);
-            reader.onloadend = () => {
-                resolve(reader.result.split(",")[1]);
-            };
-            reader.onerror = (error) => reject(error);
-        });
-    } catch (error) {
-        // Si el error es 500, lo tratamos como un caso normal y retornamos null sin loguear el error.
-        if (error?.response?.status !== 500) {
-            console.error("Error fetching audio:", error);
+        const resultado = {
+          descripcion: descripcion.toUpperCase(),
+          codigo_prediccion: codigo_prediccion,
+          descripcion_csv: descripcion_csv,
+          cantidad: cantidad,
+          imagen: imagen,
+          exactitud: exactitud,
+          id_article: id_article || codigo_prediccion,
+          correo_id: correo_id,
+        };
+
+        const entityData = {
+          CodCompany: "1",
+          IDWorkOrder: IDWorkOrder || "0222",
+          IDEmployee: IDEmployee || "1074241204161431",
+          IDMessage: correo_id || "Desconocido",
+          TextTranscription: JSON.stringify(resultado) || "Desconocido",
+          FileMP3: audio_base64,
+          FileIMG: imagen || "Desconocido",
+          FileName: file_name || "unknown_audio.mp4",
+        };
+
+        console.log("Enviando entidad con datos:", entityData);
+
+        try {
+          const entityResponse = await apiCallPredicciones(generateEntity, entityData);
+          if (entityResponse) {
+            console.log("Entidad generada exitosamente:", prediccion);
+            // Marcar el correo como leído después de crear la entidad
+            await marcarCorreoComoLeido(correo_id);
+          } else {
+            console.warn("No se obtuvo respuesta para la entidad.");
+          }
+        } catch (error) {
+          console.warn("Error al generar la entidad:", error);
         }
-        return null;
-    }
-}, []);
-
-
-const generateEntityFromPredictions = useCallback(async (prediccionesArray) => {
-  const base64Audio = await fetchAudioBase64();
-  if (!base64Audio) {
-    console.error("No se pudo obtener el audio.");
-    return;
-  }
-
-  // Usamos el correo_id, imagen y datos del audio de la primera predicción (o se podría definir otro criterio)
-  const primeraPrediccion = prediccionesArray.length > 0 ? prediccionesArray[0] : {};
-  const correo_id = primeraPrediccion.correo_id || "";
-  const fileImg = primeraPrediccion.imagen || null;
-  const idWorkOrder =
-    primeraPrediccion.IDWorkOrder ; // valor por defecto
-  const idEmployee = primeraPrediccion.IDEmployee ; // valor por defecto
-
-  const entityData = {
-    CodCompany: "1",
-    IDWorkOrder: idWorkOrder || "0222",
-    IDEmployee: idEmployee || "1074241204161431",
-    IDMessage: correo_id || "Desconocido",
-    // Se envía el arreglo completo de predicciones en formato string JSON
-    TextTranscription: JSON.stringify(prediccionesArray) || "Desconocido",
-    FileMP3: base64Audio || "Desconocido",
-    FileIMG: fileImg || "Desconocido",
-  };
-
-  console.debug("Enviando entidad con datos:", entityData);
-
-  try {
-    const entityResponse = await apiCallPredicciones(generateEntity, entityData);
-    if (entityResponse) {
-      // Refrescar los datos llamando a fetchMp3Data para que se actualice la tabla
+      }
+      console.log("Actualizando datos MP3 tras generar entidades...");
       fetchMp3Data();
-    } else {
-      console.warn("No se obtuvo respuesta para la entidad.");
-    }
-  } catch (error) {
-    console.error("Error al generar la entidad:", error);
-  }
-}, [apiCallPredicciones, fetchAudioBase64, fetchMp3Data]);
+    },
+    [apiCallPredicciones, fetchMp3Data]
+  );
 
+  // Fetch de predicciones
+  const fetchPredicciones = useCallback(
+    async () => {
+      const response = await apiCallPredicciones(() => fetch("http://10.83.0.17:5000/api/predicciones"));
+      if (!response) return;
 
-  const fetchPredicciones = useCallback(async () => {
-    const response = await apiCallPredicciones(fetch, "http://10.83.0.17:5000/api/predicciones");
-    if (!response) return; // Salir si la llamada falla
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const responseText = await response.text();
+        console.warn("Respuesta inesperada:", responseText);
+        return;
+      }
 
-    const contentType = response.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      const responseText = await response.text();
-      console.error("Respuesta inesperada:", responseText);
-      return;
-    }
+      let parsedResponse;
+      try {
+        let responseText = await response.text();
+        responseText = responseText.replace(/\bNaN\b/g, "null");
+        parsedResponse = JSON.parse(responseText);
+      } catch (error) {
+        console.warn("Error al parsear predicciones:", error);
+        return;
+      }
 
-    let parsedResponse;
-    try {
-      let responseText = await response.text();
-      // Reemplaza NaN por null para evitar errores de parseo
-      responseText = responseText.replace(/\bNaN\b/g, "null");
-      parsedResponse = JSON.parse(responseText);
-    } catch (error) {
-      console.error("Error al parsear predicciones:", error);
-      return;
-    }
+      let prediccionesArray = [];
+      if (Array.isArray(parsedResponse)) {
+        prediccionesArray = parsedResponse;
+      } else if (parsedResponse.predicciones && Array.isArray(parsedResponse.predicciones)) {
+        prediccionesArray = parsedResponse.predicciones;
+      } else {
+        console.warn("No hay predicciones disponibles.");
+        return;
+      }
 
-    // Verificamos si la respuesta es un array o si es un objeto con la propiedad "predicciones"
-    let prediccionesArray = [];
-    if (Array.isArray(parsedResponse)) {
-      prediccionesArray = parsedResponse;
-    } else if (parsedResponse.predicciones && Array.isArray(parsedResponse.predicciones)) {
-      prediccionesArray = parsedResponse.predicciones;
-    } else {
-      // No hay predicciones; no es un error, solo no hay datos
-      console.warn("No hay predicciones disponibles.");
-      return;
-    }
+      if (prediccionesArray.length === 0) {
+        console.warn("El array de predicciones está vacío.");
+        return;
+      }
 
-    // Si el array está vacío, simplemente continuamos sin generar entidad
-    if (prediccionesArray.length === 0) {
-      console.warn("El array de predicciones está vacío.");
-      return;
-    }
+      console.log("Predicciones obtenidas:", prediccionesArray);
+      await generateEntityFromPredictions(prediccionesArray);
+    },
+    [apiCallPredicciones, generateEntityFromPredictions]
+  );
 
-    // Enviar las predicciones recibidas
-    await generateEntityFromPredictions(prediccionesArray);
-  }, [apiCallPredicciones, generateEntityFromPredictions]);
-
-  // --- Efecto para obtener el idWarehouse ---
+  // Efecto para obtener idWarehouse
   useEffect(() => {
     const fetchData = async () => {
       if (email && password) {
-        const userInfo = await apiCallAlbaranes(fetchLoginUser, "1", email, password); // Usa la función genérica
+        const userInfo = await apiCallAlbaranes(fetchLoginUser, "1", email, password);
         if (userInfo) {
+          console.log("IDWarehouse obtenido");
           setIdWarehouse(userInfo.IDWarehouse);
         }
       }
     };
+    fetchData();
+  }, [email, password, apiCallAlbaranes]);
 
-    if (email && password) {
-      fetchData();
-    }
-  }, [email, password, apiCallAlbaranes]); // Dependencias correctas
-
-  // --- Efecto para refrescar datos ---
+  // Efecto para refrescar datos
   useEffect(() => {
     if (idWarehouse) {
       fetchMp3Data();
       fetchAlbaranes();
       fetchUbicaciones();
       fetchPredicciones();
+      fetchPartes();
 
-      const mp3Interval = setInterval(fetchMp3Data, 120000);
-      const albaranesInterval = setInterval(fetchAlbaranes, 120000);
-      const ubicacionesInterval = setInterval(fetchUbicaciones, 120000);
-      const prediccionesInterval = setInterval(fetchPredicciones, 120000);
+      const intervals = [
+        setInterval(fetchMp3Data, 120000),
+        setInterval(fetchAlbaranes, 120000),
+        setInterval(fetchUbicaciones, 120000),
+        setInterval(fetchPredicciones, 120000),
+        setInterval(fetchPartes, 120000),
+      ];
 
-      return () => {
-        clearInterval(mp3Interval);
-        clearInterval(albaranesInterval);
-        clearInterval(ubicacionesInterval);
-        clearInterval(prediccionesInterval);
-      };
+      return () => intervals.forEach(clearInterval);
     }
   }, [
     idWarehouse,
@@ -314,66 +317,131 @@ const generateEntityFromPredictions = useCallback(async (prediccionesArray) => {
     fetchAlbaranes,
     fetchUbicaciones,
     fetchPredicciones,
+    fetchPartes
   ]);
 
-  // Función para refrescar manualmente.  Ahora solo llama a las funciones.
+  // Refrescar datos manualmente
   const refreshData = () => {
     if (idWarehouse) {
+      console.log("Refrescando datos manualmente...");
       fetchMp3Data();
       fetchAlbaranes();
       fetchUbicaciones();
       fetchPredicciones();
+      fetchPartes();
     }
   };
 
-  // Función para renderizar la tabla de MP3 con logs
-const renderMp3Table = () => {
-  return (
+  const renderPartesTable = () => (
     <table className="table-flex table-bordered">
-      <thead style={{ backgroundColor: "#222E3C" }}>
+      <thead className="align-middle" style={{ backgroundColor: "#222E3C" }}>
         <tr>
-          <th>Orden de Trabajo</th>
-          <th>Proyecto</th>
           <th>Empleado</th>
-          <th>Artículos</th>
-          <th>Acción</th>
+          <th>Nº de Partes Pendientes</th>
         </tr>
       </thead>
       <tbody>
-        {mp3Ids.length > 0 ? (
-          mp3Ids.map((item, index) => {
-            return (
-              <tr key={index} className="text-center">
-                <td>{item.IDWorkOrder}</td>
-                <td>{item.DesProject || ""}</td>
-                <td>{capitalizeFirstLetter(item.DesEmployee) || "Empleado"}</td>
-                <td>
-                  {Array.isArray(item.TextTranscription)
-                    ? item.TextTranscription.length
-                    : 0}
-                </td>
-                <td className="justify-content-center">
-                  <button
-                    onClick={() => onButtonClick(item.IDMessage)}
-                    className="btn btn-primary"
-                  >
-                    Detalles
-                  </button>
-                </td>
+        {partesData
+          .sort((a, b) => b.Total - a.Total)
+          .map((item, index) => (
+            <React.Fragment key={index}>
+              <tr
+                className="text-center"
+                onClick={() =>
+                  setSelectedEmployee(
+                    selectedEmployee?.IDEmployee === item.IDEmployee ? null : item
+                  )
+                }
+                style={{ cursor: "pointer" }}
+              >
+                <td>{item.Description}</td>
+                <td>{item.Total}</td>
               </tr>
-            );
-          })
-        ) : (
-          <tr>
-            <td colSpan="5">No se encontraron datos.</td>
-          </tr>
-        )}
+              {selectedEmployee && selectedEmployee.IDEmployee === item.IDEmployee && (
+                <tr>
+                  <td colSpan="2">
+                    <div className="child-table mt-2">
+                      <h5>Detalle para: {item.Description}</h5>
+                      <table className="table table-bordered">
+                        <thead style={{ backgroundColor: "#283746" }}>
+                          <tr>
+                            <th>Cliente</th>
+                            <th>Código de Parte</th>
+                            <th>Fecha</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {item.Items.map((it, idx) => (
+                            <tr key={idx}>
+                              <td>{it.Customer}</td>
+                              <td>{it.WorkImputation}</td>
+                              <td>{formatDate(it.DateImputation)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>
+          ))}
       </tbody>
     </table>
   );
-};
 
-  // Función para renderizar la tabla de Albaranes.
+  // Renderizado de la tabla de MP3
+  const renderMp3Table = () => {
+    return (
+      <table className="table-flex table-bordered">
+        <thead style={{ backgroundColor: "#222E3C" }}>
+          <tr>
+            <th>Orden de Trabajo</th>
+            <th>Proyecto</th>
+            <th>Empleado</th>
+            <th>Artículos</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {mp3Ids.length > 0 ? (
+            mp3Ids.map((item, index) => {
+              let count = 0;
+              try {
+                const transcriptionObj = JSON.parse(item.TextTranscription);
+                if (Array.isArray(transcriptionObj)) {
+                  count = transcriptionObj.filter(obj => Object.prototype.hasOwnProperty.call(obj, "descripcion")).length;
+                } else if (typeof transcriptionObj === "object" && transcriptionObj !== null) {
+                  count = Object.prototype.hasOwnProperty.call(transcriptionObj, "descripcion") ? 1 : 0;
+                }
+              } catch (error) {
+                console.warn("Error al parsear TextTranscription:", error);
+              }
+              return (
+                <tr key={index} className="text-center">
+                  <td>{item.IDWorkOrder}</td>
+                  <td>{item.DesProject || ""}</td>
+                  <td>{capitalizeFirstLetter(item.DesEmployee) || "Empleado"}</td>
+                  <td>{count}</td>
+                  <td className="justify-content-center">
+                    <button onClick={() => onButtonClick(item.IDMessage)} className="btn btn-primary">
+                      Detalles
+                    </button>
+                  </td>
+                </tr>
+              );
+            })
+          ) : (
+            <tr>
+              <td colSpan="5">No se encontraron datos.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    );
+  };
+
+  // Renderizado de la tabla de Albaranes
   const renderAlbaranesTable = () => (
     <table className="table-flex table-bordered">
       <thead className="align-middle" style={{ backgroundColor: "#222E3C" }}>
@@ -391,9 +459,7 @@ const renderMp3Table = () => {
                 className="text-center"
                 onClick={() =>
                   setSelectedEmployee(
-                    selectedEmployee?.Description === item.Description
-                      ? null
-                      : item
+                    selectedEmployee?.Description === item.Description ? null : item
                   )
                 }
                 style={{ cursor: "pointer" }}
@@ -432,7 +498,7 @@ const renderMp3Table = () => {
     </table>
   );
 
-  // Función para renderizar la tabla de Ubicaciones.
+  // Renderizado de la tabla de Ubicaciones
   const renderUbicacionesTable = () => (
     <table className="table-flex table-bordered">
       <thead className="align-middle" style={{ backgroundColor: "#222E3C" }}>
@@ -469,46 +535,55 @@ const renderMp3Table = () => {
       </div>
 
       <div className="container-fluid">
-        <div className="row text-center">
-          {/* Sección de Pedidos de Voz Recibidos */}
-          <div className="col-xl-4 col-xxl-4 h-100 d-flex justify-content-center">
-            <div className="card flex-fill h-100 border border-2 mt-5">
+        <div className="row text-center g-3">
+          <div className="col-xl-6 col-lg-6 d-flex justify-content-center">
+            <div className="card flex-fill h-100 border border-2 mt-4">
               <div className="card-header">
                 <h4 className="card-title mb-0" style={{ color: "#222E3C" }}>
-                  Pedidos de Voz Recibidos
+                  <strong>Albaranes Pendientes de Firmar</strong>
                 </h4>
               </div>
-              <div className="card-body table-container">
-                {renderMp3Table()}
-              </div>
-            </div>
-          </div>
-
-          {/* Sección de Albaranes Pendientes de Firmar */}
-          <div className="col-xl-4 col-xxl-4">
-            <div className="card flex-fill h-100 border border-2 mt-5">
-              <div className="card-header">
-                <h4 className="card-title mb-0" style={{ color: "#222E3C" }}>
-                  Albaranes Pendientes de Firmar
-                </h4>
-              </div>
-              <div className="card-body table-container">
+              <div className="card-body table-container" style={{ overflowX: "auto" }}>
                 {renderAlbaranesTable()}
               </div>
             </div>
           </div>
 
-          {/* Sección de SGA: Pendientes de Ubicar/Desubicar */}
-          <div className="col-xl-4 col-xxl-4">
-            <div className="card flex-fill h-100 border border-2 mt-5">
+          <div className="col-xl-6 col-lg-6 d-flex justify-content-center">
+            <div className="card flex-fill h-100 border border-2 mt-4">
               <div className="card-header">
                 <h4 className="card-title mb-0" style={{ color: "#222E3C" }}>
-                  SGA: Pendientes de Ubicar/Desubicar
+                  <strong>Partes De Trabajo Sin Firmar</strong>
                 </h4>
-
               </div>
-              <div className="card-body table-container">
+              <div className="card-body table-container" style={{ overflowX: "auto" }}>
+                {renderPartesTable()}
+              </div>
+            </div>
+          </div>
+
+          <div className="col-xl-6 col-lg-6 d-flex justify-content-center">
+            <div className="card flex-fill h-100 border border-2 mt-4">
+              <div className="card-header">
+                <h4 className="card-title mb-0" style={{ color: "#222E3C" }}>
+                  <strong>SGA: Pendientes de Ubicar/Desubicar</strong>
+                </h4>
+              </div>
+              <div className="card-body table-container" style={{ overflowX: "auto" }}>
                 {renderUbicacionesTable()}
+              </div>
+            </div>
+          </div>
+
+          <div className="col-xl-6 col-lg-6 d-flex justify-content-center">
+            <div className="card flex-fill h-100 border border-2 mt-4">
+              <div className="card-header">
+                <h4 className="card-title mb-0" style={{ color: "#222E3C" }}>
+                  <strong>Pedidos de Voz Recibidos</strong>
+                </h4>
+              </div>
+              <div className="card-body table-container" style={{ overflowX: "auto" }}>
+                {renderMp3Table()}
               </div>
             </div>
           </div>

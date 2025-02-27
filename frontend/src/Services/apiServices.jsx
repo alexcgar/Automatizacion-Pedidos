@@ -249,3 +249,30 @@ export const fetchDocumentosSinUbicar = async (codCompany, idWarehouse) => {
     throw error;
   }
 };
+
+export const fetchPartesSinFirmar = async (codCompany, idWarehouse) => {
+  try {
+    const response = await axiosInstance.post(
+      `${API_SERVER}/api/ZappStudio/getinfowindowworkimputation`,
+      {
+        CodCompany: codCompany,
+        IDWarehouse: idWarehouse,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (response.data && response.data.success) {
+      return response.data.data;
+    } else {
+      console.error('Respuesta del servidor:', response.data);
+      throw new Error('Solicitud fallida: No se pudieron obtener los documentos.');
+    }
+  } catch (error) {
+    console.error('Error al obtener documentos', error);
+    throw error;
+  }
+};

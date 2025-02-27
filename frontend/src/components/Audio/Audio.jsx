@@ -1,52 +1,79 @@
 import { useState, useEffect } from "react";
 import { Button, Collapse, Table } from "react-bootstrap";
-import axios from "axios";
 import PropTypes from "prop-types";
+import axios from "axios";
 import "../components_css/Audio.css";
 import CustomAudioPlayer from "../ReproductorAudio/ReproductorAudio";
+import { authenticate } from "../../Services/apiServices"; // Asegúrate de importar esto
 
-function AudioPlayer({ setAudioBase64 }) {
+const AudioPlayer = ({ setAudioBase64, idBoton }) => {
   const [audioUrl, setAudioUrl] = useState("");
   const [open, setOpen] = useState(false);
 
-  const arrayBufferToBase64 = (buffer) => {
-    let binary = "";
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(bytes[i]);
+  // Función para convertir base64 a Blob y generar una URL
+  const base64ToAudioUrl = (base64String) => {
+    try {
+      const binaryString = window.atob(base64String);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const audioBlob = new Blob([bytes], { type: "audio/mp4" }); // Cambia a "audio/mp4" si es MP4
+      return URL.createObjectURL(audioBlob);
+    } catch (error) {
+      console.warn("Error al convertir base64 a audio URL:", error);
+      return "";
     }
-    return window.btoa(binary);
   };
 
+  // Obtener el audio desde el endpoint consult
   useEffect(() => {
-    const handleObtenerAudio = () => {
-      axios
-        .get("http://10.83.0.17:5000/api/getAudio", {
-          responseType: "arraybuffer",
-        })
-        .then((response) => {
-          if (response.status === 200) {
-        // Convertir arraybuffer a base64
-        const base64String = arrayBufferToBase64(response.data);
-        setAudioBase64(base64String);
-
-        // Crear Blob URL para reproducir el audio
-        const audioBlob = new Blob([response.data], { type: "audio/mp3" });
-        const url = URL.createObjectURL(audioBlob);
-        setAudioUrl(url);
+    const fetchAudioFromConsult = async () => {
+      try {
+        const response = await axios.post(
+          "https://erp.wskserver.com:56544/api/audiomp3toordersl/consult",
+          {
+            CodCompany: "1",
+            CodUser: "juani",
+            IDMessage: idBoton,
+            IsAll: false,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${await authenticate()}`,
+              "Content-Type": "application/json",
+            },
           }
-        });
+        );
+        const result = response.data;
+        if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+          const entity = result.data[0]; // Tomamos la primera entidad; ajusta si necesitas otra lógica
+          const base64Audio = entity.FileMP3;
+          if (base64Audio) {
+            console.log("Audio base64 obtenido desde consult:", base64Audio.substring(0, 50) + "...");
+            setAudioBase64(base64Audio); // Pasamos el base64 al estado superior
+            const url = base64ToAudioUrl(base64Audio);
+            setAudioUrl(url);
+          } else {
+            console.warn("No se encontró FileMP3 en la entidad:", entity);
+          }
+        } else {
+          console.warn("No se encontraron datos válidos en la respuesta:", result);
+        }
+      } catch (error) {
+        console.warn("Error al obtener el audio desde consult:", error);
+      }
     };
 
-    handleObtenerAudio();
-  }, [setAudioBase64]);
+    fetchAudioFromConsult();
+  }, [idBoton, setAudioBase64]);
 
   const handleDownload = () => {
     if (audioUrl) {
       const link = document.createElement("a");
       link.href = audioUrl;
-      link.download = "audio.mp3";
+      link.download = "audio.mp4"; // Cambia a .mp4 si es necesario
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -54,19 +81,17 @@ function AudioPlayer({ setAudioBase64 }) {
   };
 
   return (
-    <div className="text-white text-center mb-3 mt-3 ">
+    <div className="text-white text-center mb-3 mt-3">
       <Button
-        className="mb-1 "
-        onClick={() => {
-          setOpen(!open);
-        }}
+        className="mb-1"
+        onClick={() => setOpen(!open)}
         style={{ backgroundColor: "#283746", width: "100%", fontSize: "1.1rem" }}
       >
         {open ? "Cerrar Detalles" : "Ver Detalles del Audio"}
       </Button>
-      <Collapse in={open} >
-        <div className=" nova2 text-white">
-          <Table bordered className=" text-white ">
+      <Collapse in={open}>
+        <div className="nova2 text-white">
+          <Table bordered className="text-white">
             <thead>
               <tr>
                 <th className="text-white"></th>
@@ -76,7 +101,11 @@ function AudioPlayer({ setAudioBase64 }) {
             <tbody>
               <tr>
                 <td style={{ width: "100%" }}>
-                  <CustomAudioPlayer audioUrl={audioUrl}  />
+                  {audioUrl ? (
+                    <CustomAudioPlayer audioUrl={audioUrl} />
+                  ) : (
+                    <p>No hay audio disponible</p>
+                  )}
                 </td>
                 <td>
                   <div className="d-flex gap-3">
@@ -97,10 +126,11 @@ function AudioPlayer({ setAudioBase64 }) {
       </Collapse>
     </div>
   );
-}
+};
 
 AudioPlayer.propTypes = {
-  setAudioBase64: PropTypes.func.isRequired, // setAudioBase64 debe ser una función y es requerida
+  setAudioBase64: PropTypes.func.isRequired,
+  idBoton: PropTypes.string.isRequired, // Añadimos idBoton como prop requerida
 };
 
 export default AudioPlayer;
