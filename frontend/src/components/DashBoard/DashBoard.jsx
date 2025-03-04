@@ -162,7 +162,6 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
     if (idWarehouse) {
       const data = await apiCallUbicaciones(fetchDocumentosSinUbicar, "1", idWarehouse);
       if (data) {
-        console.log("Ubicaciones obtenidas:", data);
         setUbicacionesData(data);
       }
     }
@@ -219,7 +218,6 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
           const entityResponse = await apiCallPredicciones(generateEntity, entityData);
           if (entityResponse) {
             console.log("Entidad generada exitosamente:", prediccion);
-            // Marcar el correo como leído después de crear la entidad
             await marcarCorreoComoLeido(correo_id);
           } else {
             console.warn("No se obtuvo respuesta para la entidad.");
@@ -234,7 +232,6 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
     [apiCallPredicciones, fetchMp3Data]
   );
 
-  // Fetch de predicciones
   const fetchPredicciones = useCallback(
     async () => {
       const response = await apiCallPredicciones(() => fetch("http://10.83.0.17:5000/api/predicciones"));
@@ -284,7 +281,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
       if (email && password) {
         const userInfo = await apiCallAlbaranes(fetchLoginUser, "1", email, password);
         if (userInfo) {
-          console.log("IDWarehouse obtenido");
+          console.log("IDWarehouse obtenido:", userInfo.IDWarehouse);
           setIdWarehouse(userInfo.IDWarehouse);
         }
       }
@@ -302,14 +299,16 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
       fetchPartes();
 
       const intervals = [
-        setInterval(fetchMp3Data, 120000),
-        setInterval(fetchAlbaranes, 120000),
-        setInterval(fetchUbicaciones, 120000),
-        setInterval(fetchPredicciones, 120000),
-        setInterval(fetchPartes, 120000),
+        window.setInterval(() => fetchMp3Data(), 120000),
+        window.setInterval(() => fetchAlbaranes(), 120000),
+        window.setInterval(() => fetchUbicaciones(), 120000),
+        window.setInterval(() => fetchPredicciones(), 120000),
+        window.setInterval(() => fetchPartes(), 120000),
       ];
 
-      return () => intervals.forEach(clearInterval);
+      return () => {
+        intervals.forEach(window.clearInterval);
+      };
     }
   }, [
     idWarehouse,
@@ -320,17 +319,16 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
     fetchPartes
   ]);
 
-  // Refrescar datos manualmente
-  const refreshData = () => {
-    if (idWarehouse) {
-      console.log("Refrescando datos manualmente...");
-      fetchMp3Data();
-      fetchAlbaranes();
-      fetchUbicaciones();
-      fetchPredicciones();
-      fetchPartes();
-    }
-  };
+  // Efecto para reload la página cada 3 minutos
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      window.location.reload();
+    }, 180000); // 3 minutes in milliseconds
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   const renderPartesTable = () => (
     <table className="table-flex table-bordered">
@@ -521,6 +519,29 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
       </tbody>
     </table>
   );
+
+  // Efecto para reload la página cada 3 minutos
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      window.location.reload();
+    }, 180000); // 3 minutes in milliseconds
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  // Refrescar datos manualmente
+  const refreshData = () => {
+    if (idWarehouse) {
+      console.log("Refrescando datos manualmente...");
+      fetchMp3Data();
+      fetchAlbaranes();
+      fetchUbicaciones();
+      fetchPredicciones();
+      fetchPartes();
+    }
+  };
 
   return (
     <div>

@@ -2,7 +2,7 @@ import axios from "axios";
 
 export const fetchCorreos = async () => {
   try {
-    const response = await axios.get("http://10.83.0.17:5000/api/predicciones");
+    const response = await axios.get("http://127.0.0.1:5000/api/predicciones");
     if (response.status !== 200) {
       throw new Error(`Error en la solicitud: ${response.statusText}`);
     }
@@ -15,7 +15,7 @@ export const fetchCorreos = async () => {
 
 export const sendSeleccion = async (seleccion, descripcion) => {
   try {
-    await axios.post("http://10.83.0.17:5000/api/send-seleccion", {
+    await axios.post("http://127.0.0.1:5000/api/send-seleccion", {
       seleccion,
       descripcion 
     }, {
@@ -30,7 +30,7 @@ export const sendSeleccion = async (seleccion, descripcion) => {
 
 export const buscarProductos = async (busqueda) => {
   try {
-    const response = await axios.post("http://10.83.0.17:5000/api/buscar", { busqueda });
+    const response = await axios.post("http://127.0.0.1:5000/api/buscar", { busqueda });
     return response.data.rango_descripciones;
   } catch (err) {
     console.error("Error al buscar productos:", err);
@@ -40,7 +40,7 @@ export const buscarProductos = async (busqueda) => {
 
 export const generateOrder = async (orderData) => {
   try {
-    const response = await axios.post('http://10.83.0.17:5000/api/generate_order', orderData);
+    const response = await axios.post('http://127.0.0.1:5000/api/generate_order', orderData);
     return response.data;
   } catch (error) {
     console.error('Error al generar el pedido:', error);

@@ -23,5 +23,6 @@
 .table-container {
     max-height: calc(100vh - 625px); /* Ajusta el valor según lo necesites */
     min-height: 355px; /* Puedes ajustar este valor según necesites */
-    overflow-y: auto;
+    
+    
 }

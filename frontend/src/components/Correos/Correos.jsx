@@ -89,13 +89,16 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
 
   const cargarCSV = async () => {
     try {
-      const response = await fetch("http://10.83.0.17:5000/api/cargar_csv");
+      const response = await fetch("http://127.0.0.1:5000/api/cargar_csv");
       const data = await response.json();
       if (data && data.data) {
         const datosProcesados = data.data.map((item) => ({
-          ...item,
+          CodArticle: item.CodArticle,
+          Description: item.Description,
+          IDArticle: item.IDArticle, // Capturamos el IDArticle
           Combined: `${item.CodArticle} - ${item.Description}`,
         }));
+        console.log("Datos CSV procesados:", datosProcesados); // Depuración
         setDatosCSV(datosProcesados);
       } else {
         console.error("Error al cargar el CSV:", data);
@@ -125,19 +128,20 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
     descripcion
   ) => {
     const descripcionArticulo = combinedValue.split(" - ")[1]?.trim() || "";
+    const selectedItem = datosCSV.find(item => item.CodArticle === selectedOption);
     const productosActualizados = productos.map((producto) =>
       producto.codigo_prediccion === codigoPrediccion
         ? {
-          ...producto,
-          codigo_prediccion: selectedOption,
-          descripcion_csv: descripcionArticulo,
-        }
+            ...producto,
+            codigo_prediccion: selectedOption,
+            descripcion_csv: descripcionArticulo,
+            id_article: selectedItem?.IDArticle || selectedOption, // Usamos IDArticle del CSV
+          }
         : producto
     );
     setProductos(productosActualizados);
     try {
       await sendSeleccion(selectedOption, descripcion);
-      // Marcar que la selección ya fue enviada para que no se reintente
       setProductos((prevProductos) =>
         prevProductos.map((p) =>
           p.codigo_prediccion === codigoPrediccion
@@ -145,7 +149,6 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
             : p
         )
       );
-      // También puedes resetear opciones y busquedas
       setOpcionesBusqueda((prevState) => ({
         ...prevState,
         [codigoPrediccion]: [],
@@ -177,7 +180,6 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
     }
   }, [productos, autoSeleccionada]);
 
-  // Función para manejar la selección manual (cuando exactitud < 95)
   const manejarSeleccionChange = async (
     selectedOption,
     codigoPrediccion,
@@ -185,19 +187,20 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
     descripcion
   ) => {
     const descripcionArticulo = combinedValue.split(" - ")[1]?.trim() || "";
+    const selectedItem = datosCSV.find(item => item.CodArticle === selectedOption);
     const productosActualizados = productos.map((producto) =>
       producto.codigo_prediccion === codigoPrediccion
         ? {
-          ...producto,
-          codigo_prediccion: selectedOption,
-          descripcion_csv: descripcionArticulo,
-        }
+            ...producto,
+            codigo_prediccion: selectedOption,
+            descripcion_csv: descripcionArticulo,
+            id_article: selectedItem?.IDArticle || selectedOption, // Usamos IDArticle del CSV
+          }
         : producto
     );
     setProductos(productosActualizados);
     try {
       await sendSeleccion(selectedOption, descripcion);
-      // Actualizamos "busquedas" para reflejar la confirmación manual en el input
       setBusquedas((prevState) => ({
         ...prevState,
         [codigoPrediccion]: combinedValue,

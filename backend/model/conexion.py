@@ -39,11 +39,7 @@ def Query():
 
         
         df = pd.DataFrame.from_records(filas, columns=column_names)
-        df.to_parquet("backend/model/consulta_resultado.parquet", index=False)
-        print("Data saved to consulta_resultado.parquet")
-        
-        df = pd.DataFrame.from_records(filas, columns=column_names)
-        df.to_csv("backend/model/consulta_resultado.csv", index=False)
+        df.to_csv("backend/model/consulta_resultado_clean.csv", index=False)
         print("Data saved to consulta_resultado.csv")
         
         return df

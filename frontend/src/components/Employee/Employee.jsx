@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { Table, Button, Alert, Spinner } from "react-bootstrap";
-import {
-  generateOrder,
-  authenticate,
-} from "../../Services/apiServices";
+import { generateOrder, authenticate } from "../../Services/apiServices";
 import axios from "axios";
 
 const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
@@ -14,7 +11,6 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [entityData, setEntityData] = useState(null);
 
-  // Fetch entity data using idBoton
   useEffect(() => {
     const fetchEntityData = async () => {
       try {
@@ -35,12 +31,24 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
         );
 
         if (response.data && response.data.success) {
-          const transformedData = response.data.data.map(item => ({
-            ...item,
-            TextTranscription: item.TextTranscription.startsWith('[')
-              ? JSON.parse(item.TextTranscription)
-              : item.TextTranscription
-          }));
+          const transformedData = response.data.data.map(item => {
+            let parsedTranscription;
+            try {
+              parsedTranscription = JSON.parse(item.TextTranscription || '{}');
+            } catch (error) {
+              console.warn("TextTranscription no es un JSON válido, tratándolo como objeto:", item.TextTranscription);
+              console.error("Error al parsear TextTranscription:", error);
+              parsedTranscription = item.TextTranscription;
+            }
+            const transcriptionArray = Array.isArray(parsedTranscription)
+              ? parsedTranscription
+              : [parsedTranscription];
+            return {
+              ...item,
+              TextTranscription: transcriptionArray,
+            };
+          });
+          console.log("Datos transformados:", transformedData);
           setEntityData(transformedData);
           setEmployeeInfo(transformedData[0]);
         } else {
@@ -65,13 +73,13 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
         setIsLoading(false);
         return;
       }
-
+  
       if (!entityData) {
         console.error("No hay datos de la entidad.");
         setIsLoading(false);
         return;
       }
-
+  
       const orderData = {
         CodCompany: "1",
         IDAudioMP3ToOrderSL: entityData[0].IDAudioMP3ToOrderSL,
@@ -83,34 +91,29 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
           .join(","),
         Lines: productos
           .filter((producto) => producto.cantidad > 0)
-          .map((producto, index) => ({
-            IDArticle: entityData[0].TextTranscription[index].id_article,
+          .map((producto) => ({
+            IDArticle: producto.id_article,
             Quantity: producto.cantidad,
           })),
       };
-
+  
       console.log("Generando pedido:", orderData);
       const orderResponse = await generateOrder(orderData);
       console.log("Pedido generado exitosamente:", orderResponse);
       setOrderGenerated(orderResponse);
-
-      // Marcar el correo como leído una vez generado el pedido
+  
       const correoId = entityData[0].TextTranscription[0]?.correo_id;
       if (correoId) {
         try {
-          await axios.post("http://10.83.0.17:5000/api/marcar_leido", {
+          await axios.post("http://127.0.0.1:5000/api/marcar_leido", {
             correo_id: correoId,
           });
           console.log(`Correo ${correoId} marcado como leído.`);
         } catch (markError) {
-          console.error(
-            "Error al marcar el correo como leído:",
-            markError.message
-          );
+          console.error("Error al marcar el correo como leído:", markError.message);
         }
       }
-
-      // Redirige inmediatamente al Dashboard (salir de Employee)
+  
       setTimeout(() => {
         setIsLoggedIn(false);
       }, 15000);
@@ -121,7 +124,6 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
       setIsLoading(false);
     }
   };
-
   return (
     <div>
       {error && <p className="text-danger">Error: {error}</p>}
@@ -132,25 +134,15 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
           hover
           variant="light"
           className="border border-5 m-1 mb-"
-          style={{ fontSize: "1.1rem" }} // Sin espacio entre el número y 'rem'
+          style={{ fontSize: "1.1rem" }}
         >
           <thead>
             <tr>
-              <th>
-                <strong>EMPLEADO</strong>
-              </th>
-              <th>
-                <strong>ORDEN DE TRABAJO</strong>
-              </th>
-              <th>
-                <strong>CLIENTE</strong>
-              </th>
-              <th>
-                <strong>FINCA</strong>
-              </th>
-              <th>
-                <strong>PROYECTO</strong>
-              </th>
+              <th><strong>EMPLEADO</strong></th>
+              <th><strong>ORDEN DE TRABAJO</strong></th>
+              <th><strong>CLIENTE</strong></th>
+              <th><strong>FINCA</strong></th>
+              <th><strong>PROYECTO</strong></th>
             </tr>
           </thead>
           <tbody>
@@ -159,10 +151,7 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
               <td>{employeeInfo.IDWorkOrder}</td>
               <td>{employeeInfo.DesCustomer}</td>
               <td>{employeeInfo.DesCustomerDeliveryAddress}</td>
-              <td>
-                {employeeInfo.CodProject} {employeeInfo.VersionProject}{" "}
-                {employeeInfo.DesProject}
-              </td>
+              <td>{employeeInfo.CodProject} {employeeInfo.VersionProject} {employeeInfo.DesProject}</td>
             </tr>
           </tbody>
         </Table>
@@ -171,12 +160,9 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
       )}
       {orderGenerated && (
         <Alert variant="success" className="text-center mt-1">
-          <strong>Pedido generado correctamente.</strong>
-          <br />
-          <strong>Código de Pedido:</strong> {orderGenerated.data.CodOrder}
-          <br />
-          <strong>Fecha de Pedido:</strong>{" "}
-          {new Date(orderGenerated.data.OrderDate).toLocaleDateString()}
+          <strong>Pedido generado correctamente.</strong><br />
+          <strong>Código de Pedido:</strong> {orderGenerated.data.CodOrder}<br />
+          <strong>Fecha de Pedido:</strong> {new Date(orderGenerated.data.OrderDate).toLocaleDateString()}
         </Alert>
       )}
       {isLoading && (
@@ -187,7 +173,7 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
       <div className="d-flex justify-content-center mt-3 mb-4">
         <Button
           style={{
-            backgroundColor: "#28374C", // Código hexadecimal válido
+            backgroundColor: "#28374C",
             width: "100%",
             fontSize: "1.1rem",
             boxShadow: "none",
@@ -210,8 +196,6 @@ Employee.propTypes = {
     })
   ).isRequired,
   setIsLoggedIn: PropTypes.func.isRequired,
-  email: PropTypes.string.isRequired,
-  password: PropTypes.string.isRequired,
   idBoton: PropTypes.string.isRequired,
 };
 
