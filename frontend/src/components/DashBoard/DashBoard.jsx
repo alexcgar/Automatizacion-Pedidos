@@ -169,61 +169,56 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
 
   const generateEntityFromPredictions = useCallback(
     async (prediccionesArray) => {
-      for (const prediccion of prediccionesArray) {
-        const {
-          audio_base64,
-          correo_id,
-          imagen,
-          IDWorkOrder,
-          IDEmployee,
-          descripcion,
-          codigo_prediccion,
-          descripcion_csv,
-          cantidad,
-          exactitud,
-          id_article,
-          file_name,
-        } = prediccion;
-
-        if (!audio_base64) {
-          console.warn("No se encontró audio_base64 en la predicción:", prediccion);
+      // Agrupar predicciones por correo_id
+      const groupedPredictions = prediccionesArray.reduce((acc, prediccion) => {
+        const { correo_id } = prediccion;
+        if (!acc[correo_id]) {
+          acc[correo_id] = [];
+        }
+        acc[correo_id].push({
+          descripcion: prediccion.descripcion.toUpperCase(),
+          codigo_prediccion: prediccion.codigo_prediccion,
+          descripcion_csv: prediccion.descripcion_csv,
+          cantidad: prediccion.cantidad,
+          imagen: prediccion.imagen,
+          exactitud: prediccion.exactitud,
+          id_article: prediccion.id_article || prediccion.codigo_prediccion,
+          correo_id: prediccion.correo_id,
+        });
+        return acc;
+      }, {});
+  
+      // Generar una entidad por cada grupo de predicciones
+      for (const [correo_id, predictions] of Object.entries(groupedPredictions)) {
+        const firstPrediction = prediccionesArray.find(p => p.correo_id === correo_id);
+        if (!firstPrediction.audio_base64) {
+          console.warn("No se encontró audio_base64 en la predicción:", firstPrediction);
           continue;
         }
-
-        const resultado = {
-          descripcion: descripcion.toUpperCase(),
-          codigo_prediccion: codigo_prediccion,
-          descripcion_csv: descripcion_csv,
-          cantidad: cantidad,
-          imagen: imagen,
-          exactitud: exactitud,
-          id_article: id_article || codigo_prediccion,
-          correo_id: correo_id,
-        };
-
+  
         const entityData = {
           CodCompany: "1",
-          IDWorkOrder: IDWorkOrder || "0222",
-          IDEmployee: IDEmployee || "1074241204161431",
+          IDWorkOrder: firstPrediction.IDWorkOrder || "0222",
+          IDEmployee: firstPrediction.IDEmployee || "1074241204161431",
           IDMessage: correo_id || "Desconocido",
-          TextTranscription: JSON.stringify(resultado) || "Desconocido",
-          FileMP3: audio_base64,
-          FileIMG: imagen || "Desconocido",
-          FileName: file_name || "unknown_audio.mp4",
+          TextTranscription: JSON.stringify(predictions), // Array de todas las predicciones
+          FileMP3: firstPrediction.audio_base64,
+          FileIMG: firstPrediction.imagen || "Desconocido",
+          FileName: firstPrediction.file_name || "unknown_audio.mp4",
         };
-
+  
         console.log("Enviando entidad con datos:", entityData);
-
+  
         try {
           const entityResponse = await apiCallPredicciones(generateEntity, entityData);
           if (entityResponse) {
-            console.log("Entidad generada exitosamente:", prediccion);
+            console.log("Entidad generada exitosamente para correo_id:", correo_id);
             await marcarCorreoComoLeido(correo_id);
           } else {
-            console.warn("No se obtuvo respuesta para la entidad.");
+            console.warn("No se obtuvo respuesta para la entidad de correo_id:", correo_id);
           }
         } catch (error) {
-          console.warn("Error al generar la entidad:", error);
+          console.warn("Error al generar la entidad para correo_id:", correo_id, error);
         }
       }
       console.log("Actualizando datos MP3 tras generar entidades...");
@@ -231,7 +226,6 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
     },
     [apiCallPredicciones, fetchMp3Data]
   );
-
   const fetchPredicciones = useCallback(
     async () => {
       const response = await apiCallPredicciones(() => fetch("http://10.83.0.17:5000/api/predicciones"));
@@ -360,7 +354,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
                   <td colSpan="2">
                     <div className="child-table mt-2">
                       <h5>Detalle para: {item.Description}</h5>
-                      <table className="table table-bordered">
+                      <table className="table table-bordered ">
                         <thead style={{ backgroundColor: "#283746" }}>
                           <tr>
                             <th>Cliente</th>
@@ -405,19 +399,28 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
           {mp3Ids.length > 0 ? (
             mp3Ids.map((item, index) => {
               let count = 0;
-              try {
-                const transcriptionObj = JSON.parse(item.TextTranscription);
-                if (Array.isArray(transcriptionObj)) {
-                  count = transcriptionObj.filter(obj => Object.prototype.hasOwnProperty.call(obj, "descripcion")).length;
-                } else if (typeof transcriptionObj === "object" && transcriptionObj !== null) {
-                  count = Object.prototype.hasOwnProperty.call(transcriptionObj, "descripcion") ? 1 : 0;
+              let transcriptionObj = item.TextTranscription;
+  
+              // Verificar si es una cadena y parsearla si es necesario
+              if (typeof transcriptionObj === "string") {
+                try {
+                  transcriptionObj = JSON.parse(transcriptionObj);
+                } catch (error) {
+                  console.warn("Error al parsear TextTranscription como cadena:", error);
+                  transcriptionObj = null; // Valor por defecto si falla el parseo
                 }
-              } catch (error) {
-                console.warn("Error al parsear TextTranscription:", error);
               }
+  
+              // Contar los artículos según el tipo de transcriptionObj
+              if (Array.isArray(transcriptionObj)) {
+                count = transcriptionObj.filter(obj => obj && typeof obj === "object" && "descripcion" in obj).length;
+              } else if (typeof transcriptionObj === "object" && transcriptionObj !== null) {
+                count = "descripcion" in transcriptionObj ? 1 : 0;
+              }
+  
               return (
                 <tr key={index} className="text-center">
-                  <td>{item.IDWorkOrder}</td>
+                  <td>{item.CodWorkOrder}</td>
                   <td>{item.DesProject || ""}</td>
                   <td>{capitalizeFirstLetter(item.DesEmployee) || "Empleado"}</td>
                   <td>{count}</td>
@@ -433,7 +436,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
             <tr>
               <td colSpan="5">No se encontraron datos.</td>
             </tr>
-          )}
+          )}          
         </tbody>
       </table>
     );
@@ -573,7 +576,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
           <div className="col-xl-6 col-lg-6 d-flex justify-content-center">
             <div className="card flex-fill h-100 border border-2 mt-4">
               <div className="card-header">
-                <h4 className="card-title mb-0" style={{ color: "#222E3C" }}>
+                <h4 className="card-title mb-0 " style={{ color: "#222E3C" }}>
                   <strong>Partes De Trabajo Sin Firmar</strong>
                 </h4>
               </div>

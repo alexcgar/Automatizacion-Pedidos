@@ -89,7 +89,7 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
 
   const cargarCSV = async () => {
     try {
-      const response = await fetch("http://127.0.0.1:5000/api/cargar_csv");
+      const response = await fetch("http://10.83.0.17:5000/api/cargar_csv");
       const data = await response.json();
       if (data && data.data) {
         const datosProcesados = data.data.map((item) => ({
@@ -199,6 +199,7 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
         : producto
     );
     setProductos(productosActualizados);
+    console.log("Producto actualizado:", productosActualizados.find(p => p.codigo_prediccion === codigoPrediccion));
     try {
       await sendSeleccion(selectedOption, descripcion);
       setBusquedas((prevState) => ({
@@ -222,15 +223,24 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
       }));
       return;
     }
-    const busquedaNormalizada = valorBusqueda.trim().toLowerCase();
+    // Normaliza la búsqueda: elimina caracteres especiales y usa UTF-8
+    const busquedaNormalizada = valorBusqueda
+      .trim()
+      .toLowerCase()
+      .replace(/[^\w\s]/gi, "") // Elimina caracteres como Ø, -, etc.
+      .normalize("NFD") // Normaliza caracteres especiales
+      .replace(/[\u0300-\u036f]/g, ""); // Elimina diacríticos
+    
     const palabrasBusqueda = busquedaNormalizada.split(" ");
     const resultados = datosCSV.filter((item) => {
-      const textoObjetivo =
-        `${item.CodArticle} ${item.Description}`.toLowerCase();
-      return palabrasBusqueda.every((palabra) =>
-        textoObjetivo.includes(palabra)
-      );
+      const textoObjetivo = `${item.CodArticle} ${item.Description}`
+        .toLowerCase()
+        .replace(/[^\w\s]/gi, "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+      return palabrasBusqueda.every((palabra) => textoObjetivo.includes(palabra));
     });
+    
     setOpcionesBusqueda((prev) => ({
       ...prev,
       [productoId]:
@@ -427,7 +437,7 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
                     </ul>
                     ) : (
                     busquedas[producto.codigo_prediccion]?.trim() && (
-                      <div className="mt-2">No hay coincidencias</div>
+                      <div className="mt-2"></div>
                     )
                     )}
                   </div>

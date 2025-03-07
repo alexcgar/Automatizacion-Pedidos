@@ -31,16 +31,6 @@ import logging
 # Configuración básica del logging
 logging.basicConfig(level=logging.INFO)
 
-# Candado para procesar un correo a la vez
-# Candados para sincronización
-pending_emails_lock = Lock()
-processing_emails_lock = Lock()
-predicciones_lock = Lock()
-# Estructuras para gestionar correos
-pending_emails = []  # Lista de correos pendientes
-processing_emails = set()  # Conjunto de correos en procesamiento
-predicciones_recientes = []  # Predicciones actuales
-
 load_dotenv()
 
 CLIENT_ID = os.getenv("CLIENT_ID")
@@ -110,65 +100,50 @@ def obtener_token():
         error_msg = result.get("error_description", "No se pudo obtener el token de acceso.")
         raise Exception(f"No se pudo obtener el token de acceso: {error_msg}")
     
-import logging
-import time
-import threading
-
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
-
-# Simulación de estructuras de datos
-pending_emails = []  # Lista de correos pendientes
-processing_emails = set()  # Conjunto de correos en procesamiento
-pending_emails_lock = threading.Lock()  # Lock para la lista de pendientes
-processing_emails_lock = threading.Lock()  # Lock para los correos en procesamiento
-
 def procesar_correos():
-    with pending_emails_lock:
-        if not pending_emails:
-            logging.info("No hay correos pendientes para procesar.")
-            return
-        if processing_emails:
-            # Si ya hay un correo en procesamiento, registrar que otros están en espera
-            logging.info(f"Ya hay un correo en procesamiento: {list(processing_emails)[0]}. Otros correos en espera: {len(pending_emails)}")
-            return
-        correo = pending_emails.pop(0)  # Tomar el primer correo de la lista
-        with processing_emails_lock:
-            processing_emails.add(correo["id"])
-        # Registrar que se inicia el procesamiento
-        logging.info(f"Iniciando procesamiento del correo {correo['id']}")
-    
-    # Simulación de procesamiento
-    try:
-        time.sleep(2)  # Simula tiempo de procesamiento
-        logging.info(f"Procesamiento del correo {correo['id']} completado")
-    finally:
-        with processing_emails_lock:
-            processing_emails.remove(correo['id'])
-
-# Probar el procesamiento
-threading.Thread(target=procesar_correos).start()
-time.sleep(1)  # Dar tiempo para que el primer correo comience
-threading.Thread(target=procesar_correos).start()  # Intentar procesar el siguiente
-
-def cargar_correos_pendientes():
-    """Carga correos no leídos con adjuntos en pending_emails."""
     token = obtener_token()
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
     filtro = "isRead eq false and hasAttachments eq true"
     endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/mailFolders/Inbox/messages"
-    params = {"$filter": filtro, "$top": "100"}
-    
+    params = {"$filter": filtro, "$expand": "attachments", "$top": "100"}
+
     response = requests.get(endpoint, headers=headers, params=params)
     if response.status_code == 200:
         messages = response.json().get("value", [])
-        with pending_emails_lock:
-            pending_emails.clear()
-            pending_emails.extend(messages)
-        logging.info(f"Cargados {len(messages)} correos pendientes")
+        productos = []
+        audios = descargar_audio_desde_correo(CARPETA_AUDIOS) or []
+        audio_dict = {audio["correo_id"]: audio for audio in audios}
+        logging.info(f"Encontrados {len(messages)} correos no leídos con adjuntos para procesar.")
+        for message in messages:
+            correo_id = message.get("id", "Sin ID")
+            attachments = message.get("attachments", [])
+            tiene_audio = any(attachment.get("name", "").lower().endswith((".mp3", ".mp4")) for attachment in attachments)
+            if not tiene_audio:
+                logging.info(f"Correo {correo_id} ignorado: no contiene adjuntos MP3/MP4.")
+                continue
+
+            cuerpo = message.get("body", {}).get("content", "")
+            logging.info(f"Procesando correo {correo_id}, cuerpo (primeros 200 caracteres): {cuerpo[:200]}...")
+            if message.get("body", {}).get("contentType", "") == "html":
+                soup = BeautifulSoup(cuerpo, "html.parser")
+                cuerpo = soup.get_text()
+            extracted_items = extract_body_message(cuerpo, correo_id)
+            for item in extracted_items:
+                audio_info = audio_dict.get(correo_id, {})
+                item.append(audio_info.get("audio_base64", ""))  # Audio base64
+                item.append(audio_info.get("IDWorkOrder", None))
+                item.append(audio_info.get("IDEmployee", None))
+                item.append(audio_info.get("nombre", ""))  # Nombre del archivo original
+            productos.extend(extracted_items)
+        logging.info(f"Procesamiento completado, total de productos extraídos: {len(productos)}.")
+        return productos
     else:
-        logging.error(f"Error al cargar correos: {response.text}")
-        
+        logging.error(f"Error al obtener los correos: {response.status_code} - {response.text}")
+        raise Exception(f"Error al obtener los correos: {response.status_code} - {response.text}")
+
 def extract_body_message(cuerpo, correo_id):
     try:
         logging.info(f"Intentando parsear JSON del correo {correo_id}, cuerpo (primeros 200): {cuerpo[:200]}...")
@@ -233,43 +208,60 @@ def extraer_datos_del_nombre(nombre_archivo: str) -> tuple:
     logging.warning(f"Formato de nombre inválido para {nombre_archivo}, no se extrajeron datos.")
     return None, None
 
-def descargar_audio_desde_correo(correo_id):
+def descargar_audio_desde_correo(carpeta_destino):
     token = obtener_token()
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-    endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/messages/{correo_id}/attachments"
-    response = requests.get(endpoint, headers=headers)
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+    endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/mailFolders/Inbox/messages"
+    params = {"$filter": "isRead eq false and hasAttachments eq true", "$expand": "attachments", "$top": "50"}
+    response = requests.get(endpoint, headers=headers, params=params)
     audios = []
     if response.status_code == 200:
-        attachments = response.json().get("value", [])
-        for attachment in attachments:
-            nombre_archivo = attachment.get("name", "")
-            if nombre_archivo.lower().endswith((".mp3", ".mp4")):
-                attachment_id = attachment.get("id")
-                adjunto_endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/messages/{correo_id}/attachments/{attachment_id}/$value"
-                adjunto_response = requests.get(adjunto_endpoint, headers=headers)
-                if adjunto_response.status_code == 200:
-                    audio_content = adjunto_response.content
-                    audio_base64 = base64.b64encode(audio_content).decode("utf-8")
+        messages = response.json().get("value", [])
+        logging.info(f"Encontrados {len(messages)} correos no leídos con adjuntos para descargar audios.")
+        for message in messages:
+            correo_id = message.get("id", "Sin ID")
+            attachments = message.get("attachments", [])
+            for attachment in attachments:
+                nombre_archivo = attachment.get("name", "")
+                if nombre_archivo.lower().endswith((".mp3", ".mp4")):  # Soporte para mp3 y mp4
+                    logging.info(f"Procesando archivo de audio del correo {correo_id}: {nombre_archivo}")
                     dato1, dato2 = extraer_datos_del_nombre(nombre_archivo)
-                    audios.append({
-                        "nombre": nombre_archivo,
-                        "IDWorkOrder": dato1,
-                        "IDEmployee": dato2,
-                        "audio_base64": audio_base64,
-                        "correo_id": correo_id
-                    })
+                    attachment_id = attachment.get("id")
+                    adjunto_endpoint = f'https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/messages/{correo_id}/attachments/{attachment_id}/$value'
+                    adjunto_response = requests.get(adjunto_endpoint, headers=headers)
+                    if adjunto_response.status_code == 200:
+                        audio_content = adjunto_response.content
+                        audio_base64 = base64.b64encode(audio_content).decode("utf-8")
+                        audios.append({
+                            "nombre": nombre_archivo,  # Guardamos el nombre completo del archivo
+                            "IDWorkOrder": dato1,
+                            "IDEmployee": dato2,
+                            "audio_base64": audio_base64,
+                            "correo_id": correo_id
+                        })
+                        logging.info(f"Audio procesado en base64 para {nombre_archivo}, tamaño: {len(audio_base64)} caracteres")
+                    else:
+                        logging.error(f"Error al obtener el audio {nombre_archivo}: {adjunto_response.status_code}")
+        logging.info(f"Descarga completada, total de audios procesados: {len(audios)}")
         return audios if audios else None
-    return None
+    else:
+        logging.error(f"Error al obtener correos para audios: {response.status_code} - {response.text}")
+        raise Exception(f"Error al obtener correos: {response.status_code} - {response.text}")
 
 def marcar_email_como_leido(email_id):
     token = obtener_token()
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
     endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/messages/{email_id}"
     data = {"isRead": True}
     response = requests.patch(endpoint, headers=headers, json=data)
     if response.status_code != 200:
-        logging.error(f"Error al marcar correo como leído: {response.text}")
-        raise Exception("Error al marcar correo")
+        print(f"Error al marcar correo como leído: {response.status_code} - {response.text}")
 
 def procesar_texto(texto: str) -> str:
     """
@@ -293,11 +285,8 @@ def procesar_texto(texto: str) -> str:
     texto = texto.lower()
     texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("utf-8")
     texto = re.sub(r"\b(dispensadores)\b", r"dispensador", texto)
+    texto = re.sub(r"[^\w\s]", "", texto, flags=re.UNICODE)
     texto = re.sub(r"\b(\w+)(es|s)\b", r"\1", texto)
-    
-    # Procesar números en el formato especificado
-    texto = re.sub(r"(\d+)\.(\d+)", r"\1 \2", texto)
-    
     palabras = texto.split()
     return " ".join([palabra for palabra in palabras if palabra not in STOP_WORDS])
 
@@ -333,23 +322,12 @@ def cargar_datos(ruta_csv: str):
 def modelo_predecir_fuzzy(descripcion: str) -> dict:
     descripcion_normalizada = procesar_texto(descripcion)
     lista_descripciones = df["Description_Procesada"].tolist()
-    matches = difflib.get_close_matches(descripcion_normalizada, lista_descripciones, n=1, cutoff=0.75)  # Aumentamos cutoff a 0.75
+    matches = difflib.get_close_matches(descripcion_normalizada, lista_descripciones, n=1, cutoff=0.5)
     if matches:
         match = matches[0]
         row = df.loc[df["Description_Procesada"] == match].iloc[0]
         codigo_prediccion = row["CodArticle"]
         descripcion_csv = row["Description"]
-        
-        # Verificar si las dimensiones están presentes en la coincidencia
-        dimensiones = re.findall(r"\d+", descripcion_normalizada)
-        if dimensiones and not all(dim in match for dim in dimensiones):
-            logging.warning(f"Coincidencia '{match}' no contiene todas las dimensiones: {dimensiones}")
-            return {
-                "codigo_prediccion": None,
-                "mensaje": "Coincidencia no contiene dimensiones esperadas",
-                "match_method": "fuzzy"
-            }
-        
         return {
             "codigo_prediccion": codigo_prediccion,
             "descripcion_producto": descripcion_csv,
@@ -429,6 +407,35 @@ def inicializar_modelo():
         guardar_modelo({"model": model, "vectorizer": vectorizer}, None, RUTA_MODELO)
     backup_model(RUTA_MODELO, RUTA_BACKUP)
 
+
+
+def mostrar_correos_no_leidos():
+    """
+    Obtiene y muestra en consola los correos sin leer junto con su contenido.
+    """
+    token = obtener_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+    # Puedes ajustar el filtro según necesites
+    filtro = "isRead eq false"
+    endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/mailFolders/Inbox/messages"
+    params = {"$filter": filtro, "$top": "100"}
+    
+    response = requests.get(endpoint, headers=headers, params=params)
+    if response.status_code == 200:
+        messages = response.json().get("value", [])
+        for message in messages:
+            correo_id = message.get("id", "Sin ID")
+            cuerpo = message.get("body", {}).get("content", "")
+            # Si el contenido es HTML, extraemos solo el texto
+            if message.get("body", {}).get("contentType", "").lower() == "html":
+                cuerpo = BeautifulSoup(cuerpo, "html.parser").get_text()
+    else:
+        print(f"Error al obtener los correos: {response.status_code} - {response.text}")
+
+
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
@@ -444,14 +451,11 @@ def fix_cors_headers(response):
 @app.route("/api/cargar_csv", methods=["GET"])
 def cargar_csv():
     try:
-        df_csv = pd.read_csv(RUTA_CSV, usecols=["CodArticle", "Description", "IDArticle"])
-        logging.info(f"Total de filas: {len(df_csv)}")
+        df_csv = pd.read_csv(RUTA_CSV, usecols=["CodArticle", "Description","IDArticle"])
         datos_csv = df_csv.to_dict(orient="records")
-        logging.info(f"Enviando todas las filas")
-        return jsonify({"data": datos_csv, "total": len(df_csv)}), 200
+        return jsonify({"data": datos_csv}), 200
     except Exception as e:
-        logging.error(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"No se pudo cargar el archivo CSV: {str(e)}"}), 500
 
 
 @app.route("/api/send-seleccion", methods=["POST"])
@@ -463,10 +467,9 @@ def recibir_seleccion():
         return jsonify({"error": "Faltan datos en la solicitud."}), 400
     try:
         actualizar_modelo(descripcion, seleccion)
+        # Se asume que las predicciones se actualizarán en segundo plano.
         predicciones_actualizadas = obtener_predicciones()
-        # Buscar el IDArticle en df_lookup si existe
-        id_article = df_lookup[df_lookup["CodArticle"] == seleccion]["IDArticle"].iloc[0] if not df_lookup.empty else seleccion
-        return jsonify({"id_article": id_article, "predicciones": predicciones_actualizadas}), 200
+        return predicciones_actualizadas
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -475,7 +478,30 @@ if not os.path.exists(CARPETA_AUDIOS):
 
 
 audio_info_global = {}
+
+
+@app.route("/api/getAudio", methods=["GET"])
+def get_audio():
+    global audio_info_global
+    info_list = descargar_audio_desde_correo(CARPETA_AUDIOS)
+    if info_list and len(info_list) > 0:
+        # Seleccionar el primer audio disponible
+        info = info_list[0]
+        audio_info_global = {
+            "IDWorkOrder": info.get("IDWorkOrder"),
+            "IDEmployee": info.get("IDEmployee"),
+        }
+        return send_file(
+            info.get("ruta"),
+            mimetype="audio/mpeg",
+            as_attachment=True,
+            download_name="audio.mp4",
+        )
+    else:
+        return jsonify({"message": "No hay audio disponible."}), 200
+
 predicciones_recientes = []
+historial_predicciones = []
 predicciones_lock = Lock()
 
 
@@ -531,7 +557,6 @@ def procesar_producto(producto: list) -> dict:
         formato_audio = extension.lstrip(".").lower() if extension else "mp4"
     logging.info(f"Formato de audio detectado: {formato_audio}")
 
-    
     resultado = {
         "descripcion": descripcion.upper(),
         "codigo_prediccion": codigo_prediccion,
@@ -549,21 +574,22 @@ def procesar_producto(producto: list) -> dict:
     return resultado
 
 def actualizar_predicciones_periodicamente():
-    """Hilo que actualiza las predicciones procesando correos pendientes."""
-    global predicciones_recientes
+    """
+    Actualiza las predicciones de forma periódica procesando correos recibidos.
+    """
+    global predicciones_recientes, historial_predicciones
     while True:
         try:
-            if not pending_emails:
-                cargar_correos_pendientes()
             productos = procesar_correos()
-            if productos:
-                nuevas_predicciones = [procesar_producto(producto) for producto in productos]
-                with predicciones_lock:
-                    predicciones_recientes.clear()
-                    predicciones_recientes.extend(nuevas_predicciones)
+            mostrar_correos_no_leidos()
+            nuevas_predicciones = [procesar_producto(producto) for producto in productos]
+            with predicciones_lock:
+                predicciones_recientes.clear()
+                predicciones_recientes.extend(nuevas_predicciones)
+                historial_predicciones.extend(nuevas_predicciones)
         except Exception as e:
-            logging.error(f"Error actualizando predicciones: {e}")
-        time.sleep(10)  # Intervalo ajustable
+            logging.error("Error actualizando predicciones: %s", e)
+        time.sleep(60)
 
 
 @app.route("/api/marcar_leido", methods=["POST"])
@@ -572,28 +598,18 @@ def marcar_correo_leido():
     correo_id = data.get("correo_id")
     if not correo_id:
         return jsonify({"error": "ID del correo no proporcionado"}), 400
-    
     try:
-        with processing_emails_lock:
-            if correo_id in processing_emails:
-                return jsonify({"error": "Correo aún en procesamiento"}), 400
-        
         marcar_email_como_leido(correo_id)
-        with pending_emails_lock:
-            pending_emails[:] = [email for email in pending_emails if email["id"] != correo_id]
-        logging.info(f"Correo {correo_id} marcado como leído y eliminado de pendientes")
-        
-        # Iniciar procesamiento del siguiente correo
-        threading.Thread(target=procesar_correos, daemon=True).start()
         return jsonify({"message": "Correo marcado como leído"}), 200
     except Exception as e:
-        return jsonify({"error": f"No se pudo marcar el correo: {e}"}), 500
+        return jsonify({"error": f"No se pudo marcar el correo como leído: {e}"}), 500
 
 @app.route("/api/predicciones", methods=["GET"])
 def obtener_predicciones():
+    global predicciones_recientes
     with predicciones_lock:
         predicciones = predicciones_recientes.copy()
-    logging.info(f"Enviando {len(predicciones)} predicciones")
+    logging.info(f"Enviando {len(predicciones)} predicciones a la API, incluyendo audio_base64")
     return jsonify(predicciones), 200
 
 @app.route("/")
@@ -614,12 +630,13 @@ def static_assets(filename):
 
 if __name__ == "__main__":
     inicializar_modelo()
-    cargar_correos_pendientes()
     hilo_actualizador = threading.Thread(target=actualizar_predicciones_periodicamente, daemon=True)
     hilo_actualizador.start()
     
     try:
         from waitress import serve
-        serve(app, host="127.0.0.1", port=5000, threads=1)
+        # Serve usando Waitress (pip install waitress)
+        serve(app, host="10.83.0.17", port=5000, threads=1)
     except ImportError:
+        # Si no está instalado waitress, se arranca en modo desarrollo (no recomendado en producción)
         app.run(host="0.0.0.0", port=5000, debug=False)

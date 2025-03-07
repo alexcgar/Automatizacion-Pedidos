@@ -66,6 +66,7 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
   }, [idBoton]);
 
   const handleGenerateOrder = async () => {
+    console.log("Productos a enviar:", productos);
     setIsLoading(true);
     try {
       if (!productos || productos.length === 0) {
@@ -105,7 +106,7 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
       const correoId = entityData[0].TextTranscription[0]?.correo_id;
       if (correoId) {
         try {
-          await axios.post("http://127.0.0.1:5000/api/marcar_leido", {
+          await axios.post("http://10.83.0.17:5000/api/marcar_leido", {
             correo_id: correoId,
           });
           console.log(`Correo ${correoId} marcado como leído.`);
@@ -116,7 +117,7 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
   
       setTimeout(() => {
         setIsLoggedIn(false);
-      }, 15000);
+      }, 60000);
     } catch (error) {
       console.error("Error al generar el pedido:", error);
       setError("Error al generar el pedido: " + error.message);
@@ -148,7 +149,7 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
           <tbody>
             <tr>
               <td>{employeeInfo.DesEmployee}</td>
-              <td>{employeeInfo.IDWorkOrder}</td>
+              <td>{employeeInfo.CodWorkOrder}</td>
               <td>{employeeInfo.DesCustomer}</td>
               <td>{employeeInfo.DesCustomerDeliveryAddress}</td>
               <td>{employeeInfo.CodProject} {employeeInfo.VersionProject} {employeeInfo.DesProject}</td>
