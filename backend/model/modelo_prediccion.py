@@ -10,45 +10,55 @@ from threading import Lock
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-import ast  # Asegúrate de tener 'import ast' en la parte superior del archivo
+import ast  
 
-
+# Importar librerias de peticiones HTTP
 import requests
 from msal import ConfidentialClientApplication
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
 from flask_cors import CORS
 
+# Importar librerías de procesamiento de texto
 import joblib
 import pandas as pd
+
+# Importtar librerias de comparación de texto
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import difflib
 import unicodedata
 
+# Libreria para el manejo de logs
 import logging
 
 # Configuración básica del logging
 logging.basicConfig(level=logging.INFO)
 
-load_dotenv()
 
+load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
 TENANT_ID = os.getenv("TENANT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 USER_EMAIL = os.getenv("USER_EMAIL")  # Correo electrónico de la bandeja de entrada a monitorear
 
+
+# Configuración de permisos para el token de acceso
 SCOPES = ["https://graph.microsoft.com/.default"] 
 
+
+# Definir rutas de archivos y carpetas (he usado os.path.join para que sea compatible con Windows y Linux)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RUTA_MODELO = os.path.join(BASE_DIR, "modelo_actualizado.joblib")
 RUTA_CSV_CLEAN = os.path.join(BASE_DIR, "consulta_resultado_clean.csv")
 RUTA_CSV = os.path.join(BASE_DIR, "consulta_resultado.csv")
 RUTA_DESC_CONFIRMADAS_PKL = os.path.join(BASE_DIR, "descripciones_confirmadas.joblib")
 RUTA_DESC_CONFIRMADAS_JSON = os.path.join(BASE_DIR, "descripciones_confirmadas.json")
-CARPETA_AUDIOS = os.path.join(BASE_DIR, "audios")
 RUTA_BACKUP = os.path.join(BASE_DIR, "../backups")  
 
+
+# Definir un lock global para el procesamiento de correos
+procesamiento_lock = threading.Lock()
 
 
 STOP_WORDS = [
@@ -103,9 +113,6 @@ def obtener_token():
     else:
         error_msg = result.get("error_description", "No se pudo obtener el token de acceso.")
         raise Exception(f"No se pudo obtener el token de acceso: {error_msg}")
-
-# Definir un lock global para el procesamiento de correos
-procesamiento_lock = threading.Lock()
 
 
 
@@ -249,7 +256,7 @@ def extraer_datos_del_nombre(nombre_archivo: str) -> tuple:
 
 
 
-def descargar_audio_desde_correo(carpeta_destino):
+def descargar_audio_desde_correo():
     token = obtener_token()
     headers = {
         "Authorization": f"Bearer {token}",
@@ -596,9 +603,6 @@ def recibir_seleccion():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-if not os.path.exists(CARPETA_AUDIOS):
-    os.makedirs(CARPETA_AUDIOS)
-
 
 audio_info_global = {}
 
@@ -606,7 +610,7 @@ audio_info_global = {}
 @app.route("/api/getAudio", methods=["GET"])
 def get_audio():
     global audio_info_global
-    info_list = descargar_audio_desde_correo(CARPETA_AUDIOS)
+    info_list = descargar_audio_desde_correo()
     if info_list and len(info_list) > 0:
         # Seleccionar el primer audio disponible
         info = info_list[0]
@@ -658,8 +662,6 @@ def procesar_producto(producto: dict) -> dict:
         else:
             exactitud = 0
             logging.warning(f"[procesar_producto] Código predicho no se encontró en df: {codigo_prediccion}")
-
-   
     if not df_lookup.empty:
         registros = df_lookup[df_lookup["CodArticle"] == codigo_prediccion]
         descripcion_csv = registros["Description"].iloc[0] if not registros.empty else "Descripción no encontrada"

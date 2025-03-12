@@ -168,7 +168,7 @@ export const fetchLoginUser = async (codCompany, codUser, password) => {
   }
 };
 
-export const fetchEmployeeInfo = async (codCompany, codUser, idMessage) => {
+export const fetchEmployeeInfo = async (codCompany, codUser, idMessage, idSite) => {
   try {
     const response = await axiosInstance.post(
       `${API_SERVER}/api/audiomp3toordersl/consult`,
@@ -177,6 +177,7 @@ export const fetchEmployeeInfo = async (codCompany, codUser, idMessage) => {
         CodUser: codUser,
         IDMessage: idMessage,
         IsAll: false, // Agregar el campo faltante
+        IDSite: idSite, // nuevo campo
       },
       {
         headers: {
@@ -197,18 +198,17 @@ export const fetchEmployeeInfo = async (codCompany, codUser, idMessage) => {
   }
 };
 
-export const fetchAlbaranesSinFirmar = async (codCompany, idWarehouse) => {
+export const fetchAlbaranesSinFirmar = async (codCompany, idWarehouse, idSite) => {
   try {
     const response = await axiosInstance.post(
       `${API_SERVER}/api/ZappStudio/getinfowindow`,
       {
         CodCompany: codCompany,
         IDWarehouse: idWarehouse,
+        IDSite: idSite, // nuevo campo
       },
       {
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       }
     );
 
@@ -224,18 +224,17 @@ export const fetchAlbaranesSinFirmar = async (codCompany, idWarehouse) => {
   }
 };
 
-export const fetchDocumentosSinUbicar = async (codCompany, idWarehouse) => {
+export const fetchDocumentosSinUbicar = async (codCompany, idWarehouse, idSite) => {
   try {
     const response = await axiosInstance.post(
       `${API_SERVER}/api/MySGA/getinfowindow`,
       {
         CodCompany: codCompany,
         IDWarehouse: idWarehouse,
+        IDSite: idSite, // nuevo campo
       },
       {
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       }
     );
 
@@ -251,18 +250,17 @@ export const fetchDocumentosSinUbicar = async (codCompany, idWarehouse) => {
   }
 };
 
-export const fetchPartesSinFirmar = async (codCompany, idWarehouse) => {
+export const fetchPartesSinFirmar = async (codCompany, idWarehouse, idSite) => {
   try {
     const response = await axiosInstance.post(
       `${API_SERVER}/api/ZappStudio/getinfowindowworkimputation`,
       {
         CodCompany: codCompany,
         IDWarehouse: idWarehouse,
+        IDSite: idSite, // nuevo campo
       },
       {
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       }
     );
 

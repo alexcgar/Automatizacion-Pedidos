@@ -373,7 +373,7 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
                     <input
                       title="Cantidad"
                       type="number"
-                      step="0.01"
+                      step="1"
                       min="0"
                       className="form-control"
                       value={producto.cantidad}
