@@ -49,6 +49,8 @@ RUTA_DESC_CONFIRMADAS_JSON = os.path.join(BASE_DIR, "descripciones_confirmadas.j
 CARPETA_AUDIOS = os.path.join(BASE_DIR, "audios")
 RUTA_BACKUP = os.path.join(BASE_DIR, "../backups")  
 
+
+
 STOP_WORDS = [
     "a", "acá", "ahí", "ajena", "ajenas", "ajeno", "ajenos", "al", "algo", "algún",
     "alguna", "algunas", "alguno", "algunos", "allá", "alli", "allí", "ambos", "ampleamos",
@@ -86,6 +88,8 @@ STOP_WORDS = [
     "yo"
 ]
 
+
+
 def obtener_token():
     """Obtiene un token de acceso utilizando Client Credentials Flow."""
     app_conf = ConfidentialClientApplication(
@@ -99,54 +103,87 @@ def obtener_token():
     else:
         error_msg = result.get("error_description", "No se pudo obtener el token de acceso.")
         raise Exception(f"No se pudo obtener el token de acceso: {error_msg}")
-    
+
+# Definir un lock global para el procesamiento de correos
+procesamiento_lock = threading.Lock()
+
+
+
 def procesar_correos():
     token = obtener_token()
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json",
-    }
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
     filtro = "isRead eq false and hasAttachments eq true"
     endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/mailFolders/Inbox/messages"
     params = {"$filter": filtro, "$expand": "attachments", "$top": "100"}
 
     response = requests.get(endpoint, headers=headers, params=params)
-    if response.status_code == 200:
-        messages = response.json().get("value", [])
-        productos = []
-        audios = descargar_audio_desde_correo(CARPETA_AUDIOS) or []
-        audio_dict = {audio["correo_id"]: audio for audio in audios}
-        logging.info(f"Encontrados {len(messages)} correos no leídos con adjuntos para procesar.")
-        for message in messages:
-            correo_id = message.get("id", "Sin ID")
-            attachments = message.get("attachments", [])
-            tiene_audio = any(attachment.get("name", "").lower().endswith((".mp3", ".mp4")) for attachment in attachments)
-            if not tiene_audio:
-                logging.info(f"Correo {correo_id} ignorado: no contiene adjuntos MP3/MP4.")
-                continue
-
-            cuerpo = message.get("body", {}).get("content", "")
-            logging.info(f"Procesando correo {correo_id}, cuerpo (primeros 200 caracteres): {cuerpo[:200]}...")
-            if message.get("body", {}).get("contentType", "") == "html":
-                soup = BeautifulSoup(cuerpo, "html.parser")
-                cuerpo = soup.get_text()
-            extracted_items = extract_body_message(cuerpo, correo_id)
-            for item in extracted_items:
-                audio_info = audio_dict.get(correo_id, {})
-                item.append(audio_info.get("audio_base64", ""))  # Audio base64
-                item.append(audio_info.get("IDWorkOrder", None))
-                item.append(audio_info.get("IDEmployee", None))
-                item.append(audio_info.get("nombre", ""))  # Nombre del archivo original
-            productos.extend(extracted_items)
-        logging.info(f"Procesamiento completado, total de productos extraídos: {len(productos)}.")
-        return productos
-    else:
+    if response.status_code != 200:
         logging.error(f"Error al obtener los correos: {response.status_code} - {response.text}")
         raise Exception(f"Error al obtener los correos: {response.status_code} - {response.text}")
 
+    messages = response.json().get("value", [])
+    productos = []
+    logging.info(f"Encontrados {len(messages)} correos no leídos con adjuntos para procesar.")
+
+    for message in messages:
+        correo_id = message.get("id", "Sin ID")
+        attachments = message.get("attachments", [])
+        for att in attachments:
+            nombre_archivo = att.get("name", "")
+            if nombre_archivo.lower().endswith((".mp3", ".mp4")):
+                logging.info(f"Procesando archivo de audio del correo {correo_id}: {nombre_archivo}")
+                dato1, dato2 = extraer_datos_del_nombre(nombre_archivo)
+                attachment_id = att.get("id")
+                adjunto_endpoint = (
+                    f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/messages/{correo_id}"
+                    f"/attachments/{attachment_id}/$value"
+                )
+                adjunto_response = requests.get(adjunto_endpoint, headers=headers)
+                if adjunto_response.status_code == 200:
+                    audio_content = adjunto_response.content
+                    audio_base64 = base64.b64encode(audio_content).decode("utf-8")
+                    audio_info = {
+                        "audio_base64": audio_base64,
+                        "IDWorkOrder": dato1,
+                        "IDEmployee": dato2,
+                        "nombre_audio": formatear_file_name(nombre_archivo)  # Asegura que tenga la extensión correcta
+                    }
+                    logging.info(f"Audio procesado en memoria para {correo_id}: tamaño {len(audio_base64)} caracteres")
+                else:
+                    logging.error(f"Error al descargar audio {nombre_archivo} del correo {correo_id}")
+                break  # Procesamos solo el primer audio encontrado
+
+        # Procesar el cuerpo del correo
+        cuerpo = message.get("body", {}).get("content", "")
+        if message.get("body", {}).get("contentType", "").lower() == "html":
+            soup = BeautifulSoup(cuerpo, "html.parser")
+            cuerpo = soup.get_text()
+        extracted_items = extract_body_message(cuerpo, correo_id)
+
+        for item in extracted_items:
+            producto_info = {
+                "descripcion": item[0],
+                "cantidad": item[1],
+                "correo_id": item[2],
+                "audio": audio_info if audio_info else {}
+            }
+            productos.append(producto_info)
+
+        try:
+            marcar_email_como_leido(correo_id)
+        except Exception as e:
+            logging.error(f"Error marcando como leído el correo {correo_id}: {e}")
+
+        # No es necesario asignar audio_info = None aquí si ya está local al ciclo
+
+    logging.info(f"Procesamiento completado, total de productos extraídos: {len(productos)}.")
+    return productos
+
+
+
+
 def extract_body_message(cuerpo, correo_id):
     try:
-        logging.info(f"Intentando parsear JSON del correo {correo_id}, cuerpo (primeros 200): {cuerpo[:200]}...")
         cuerpo = cuerpo.replace("'", '"')
         try:
             mensaje_json = json.loads(cuerpo)
@@ -185,6 +222,8 @@ def extract_body_message(cuerpo, correo_id):
         logging.error(f"Error general procesando correo {correo_id}: {e}")
         return []
 
+
+
 def extraer_datos_del_nombre(nombre_archivo: str) -> tuple:
     """
     Extrae dos datos importantes del nombre del archivo mp4.
@@ -207,6 +246,8 @@ def extraer_datos_del_nombre(nombre_archivo: str) -> tuple:
         return dato1, dato2
     logging.warning(f"Formato de nombre inválido para {nombre_archivo}, no se extrajeron datos.")
     return None, None
+
+
 
 def descargar_audio_desde_correo(carpeta_destino):
     token = obtener_token()
@@ -242,14 +283,14 @@ def descargar_audio_desde_correo(carpeta_destino):
                             "audio_base64": audio_base64,
                             "correo_id": correo_id
                         })
-                        logging.info(f"Audio procesado en base64 para {nombre_archivo}, tamaño: {len(audio_base64)} caracteres")
                     else:
                         logging.error(f"Error al obtener el audio {nombre_archivo}: {adjunto_response.status_code}")
-        logging.info(f"Descarga completada, total de audios procesados: {len(audios)}")
         return audios if audios else None
     else:
         logging.error(f"Error al obtener correos para audios: {response.status_code} - {response.text}")
         raise Exception(f"Error al obtener correos: {response.status_code} - {response.text}")
+
+
 
 def marcar_email_como_leido(email_id):
     token = obtener_token()
@@ -262,6 +303,8 @@ def marcar_email_como_leido(email_id):
     response = requests.patch(endpoint, headers=headers, json=data)
     if response.status_code != 200:
         print(f"Error al marcar correo como leído: {response.status_code} - {response.text}")
+
+
 
 def procesar_texto(texto: str) -> str:
     """
@@ -277,6 +320,18 @@ def procesar_texto(texto: str) -> str:
     sinonimos = {
         "pegamento": "adhesivo",
         "cola": "adhesivo",
+        "mililitros": "ml",
+        "mililitro": "ml",
+        "milímetros": "mm",
+        "milímetro": "mm",
+        "centímetros": "cm",
+        "centímetro": "cm",
+        "metros": "m",
+        "pp": "polipropileno",
+        "polipropileno": "pp",
+        "polietileno": "pe",
+        
+        
         # Agregar más sinónimos según se requiera.
     }
     for palabra, reemplazo in sinonimos.items():
@@ -319,49 +374,150 @@ def cargar_datos(ruta_csv: str):
     y = df_local["CodArticle"].tolist()
     return X, y, df_local
 
+def modelo_predecir(descripcion: str) -> dict:
+    descripcion_procesada = procesar_texto(descripcion)
+    logging.info(f"[modelo_predecir] Descripción original: '{descripcion}'")
+    logging.info(f"[modelo_predecir] Descripción procesada: '{descripcion_procesada}'")
+    matches = difflib.get_close_matches(descripcion_procesada, df["Description_Procesada"].tolist(), n=1, cutoff=0.5)
+    logging.info(f"[modelo_predecir] Matches encontrados: {matches}")
+    if matches:
+        match = matches[0]
+        row = df.loc[df["Description_Procesada"] == match].iloc[0]
+        codigo_prediccion = row["CodArticle"]
+        logging.info(f"[modelo_predecir] Coincidencia encontrada: '{match}', CodArticle: '{codigo_prediccion}'")
+        return {"codigo_prediccion": codigo_prediccion}
+    else:
+        logging.warning(f"[modelo_predecir] No se encontró coincidencia para '{descripcion_procesada}'")
+        return {"codigo_prediccion": None}
+
+
 def modelo_predecir_fuzzy(descripcion: str) -> dict:
     descripcion_normalizada = procesar_texto(descripcion)
+    logging.info(f"[modelo_predecir_fuzzy] Descripción original: '{descripcion}'")
+    logging.info(f"[modelo_predecir_fuzzy] Descripción normalizada: '{descripcion_normalizada}'")
     lista_descripciones = df["Description_Procesada"].tolist()
+    logging.info(f"[modelo_predecir_fuzzy] Total de descripciones en df: {len(lista_descripciones)}")
     matches = difflib.get_close_matches(descripcion_normalizada, lista_descripciones, n=1, cutoff=0.5)
+    logging.info(f"[modelo_predecir_fuzzy] Matches encontrados: {matches}")
     if matches:
         match = matches[0]
         row = df.loc[df["Description_Procesada"] == match].iloc[0]
         codigo_prediccion = row["CodArticle"]
         descripcion_csv = row["Description"]
+        logging.info(f"[modelo_predecir_fuzzy] Coincidencia encontrada: '{match}' con código '{codigo_prediccion}'")
         return {
             "codigo_prediccion": codigo_prediccion,
             "descripcion_producto": descripcion_csv,
             "match_method": "fuzzy"
         }
     else:
+        logging.warning(f"[modelo_predecir_fuzzy] No se encontró coincidencia para '{descripcion}'")
         return {
             "codigo_prediccion": None,
             "mensaje": "No se encontró una coincidencia similar",
             "match_method": "fuzzy"
         }
+def formatear_file_name(nombre_audio: str) -> str:
+    """
+    Asegura que el nombre del archivo tenga la extensión .mp4.
+    Si el nombre termina en '_mp4', se reemplaza por '.mp4'.
+    Si ya tiene '.mp4' o no se detecta el sufijo, se deja tal cual o se agrega la extensión.
+    """
+    nombre = nombre_audio.strip()
+    # Si ya tiene la extensión correcta, se retorna
+    if nombre.lower().endswith(".mp4"):
+        return nombre
+    # Si termina con _mp4 (sin punto), se reemplaza
+    if nombre.lower().endswith("_mp4"):
+        return nombre[:-4] + ".mp4" 
+    # Si termina con mp4 pero sin punto (y no tiene _mp4)
+    if nombre.lower().endswith("mp4"):
+        return nombre[:-3] + ".mp4"
+    # Sino, se le agrega la extensión
+    return f"{nombre}.mp4"
 
-def modelo_predecir(descripcion: str) -> dict:
-    descripcion_normalizada = procesar_texto(descripcion)
-    if descripcion_normalizada in descripciones_confirmadas:
-        codigo_prediccion = descripciones_confirmadas[descripcion_normalizada]
-    else:
-        resultado = modelo_predecir_fuzzy(descripcion)
-        codigo_prediccion = resultado.get("codigo_prediccion")
+
+def procesar_producto(producto: dict) -> dict:
+    descripcion = producto["descripcion"]
+    cantidad = producto["cantidad"]
+    correo_id = producto["correo_id"]
+    audio_info = producto["audio"]
+
+    logging.info(f"[procesar_producto] Procesando producto del correo {correo_id}")
+    logging.info(f"[procesar_producto] Descripción recibida: '{descripcion}'")
     
-    if not df_lookup.empty and codigo_prediccion in df_lookup["CodArticle"].values:
-        registro = df_lookup.loc[df_lookup["CodArticle"] == codigo_prediccion].iloc[0].to_dict()
-        return {
-            "codigo_prediccion": codigo_prediccion,
-            "descripcion_producto": registro.get("Description", ""),
-            "otros_datos": registro,
-            "match_method": "fuzzy"
-        }
+    descripcion_procesada = procesar_texto(descripcion)
+    logging.info(f"[procesar_producto] Descripción procesada: '{descripcion_procesada}'")
+
+    # Realizar la predicción basándose únicamente en el texto
+    if descripcion_procesada in descripciones_confirmadas:
+        codigo_prediccion = descripciones_confirmadas[descripcion_procesada]
+        exactitud = 100
+        logging.info(f"[procesar_producto] Predicción confirmada encontrada: {codigo_prediccion}")
     else:
-        return {
-            "codigo_prediccion": codigo_prediccion,
-            "mensaje": "No se encontró registro en consulta_resultado.csv",
-            "match_method": "fuzzy"
-        }
+        resultado_prediccion = modelo_predecir(descripcion)
+        codigo_prediccion = resultado_prediccion.get("codigo_prediccion")
+        if codigo_prediccion in df["CodArticle"].values:
+            descripcion_csv_predicha = df.loc[df["CodArticle"] == codigo_prediccion, "Description_Procesada"].iloc[0]
+            vectorizador_similitud = TfidfVectorizer()
+            tfidf_matrix = vectorizador_similitud.fit_transform([descripcion_procesada, descripcion_csv_predicha])
+            cosine_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+            exactitud = int(min((cosine_sim + 0.15) * 100, 100))
+            logging.info(f"[procesar_producto] Predicción calculada: {codigo_prediccion} con exactitud {exactitud}%")
+        else:
+            exactitud = 0
+            logging.warning(f"[procesar_producto] Código predicho no se encontró en df: {codigo_prediccion}")
+
+    # Lookup para obtener datos adicionales (descripción CSV, imagen, etc.)
+    if not df_lookup.empty:
+        registros = df_lookup[df_lookup["CodArticle"] == codigo_prediccion]
+        descripcion_csv = registros["Description"].iloc[0] if not registros.empty else "Descripción no encontrada"
+        imagen = ""
+        if not registros.empty and "Image" in registros:
+            imagen_temp = registros["Image"].iloc[0]
+            if pd.isna(imagen_temp):
+                imagen = ""
+            elif isinstance(imagen_temp, str) and (imagen_temp.startswith("b'") or imagen_temp.startswith('b"')):
+                try:
+                    imagen_bytes = ast.literal_eval(imagen_temp)
+                    imagen_base64 = base64.b64encode(imagen_bytes).decode("utf-8")
+                    imagen = imagen_base64
+                except Exception as e:
+                    logging.error(f"[procesar_producto] Error al convertir imagen a base64: {e}")
+                    imagen = ""
+            else:
+                imagen = imagen_temp
+        id_article_arr = df_lookup[df_lookup["CodArticle"] == codigo_prediccion]["IDArticle"].values
+        id_article = id_article_arr[0] if len(id_article_arr) > 0 else None
+    else:
+        descripcion_csv = "Descripción no encontrada"
+        imagen = ""
+        id_article = None
+
+    # Usar el nombre original del audio para FileName, pero formatearlo para tener la extensión correcta
+    nombre_audio_original = audio_info.get("nombre_audio", "") if audio_info else ""
+    file_name = formatear_file_name(nombre_audio_original)
+    # FileMP3 contendrá el audio en base64
+    file_mp3 = audio_info.get("audio_base64", "") if audio_info else ""
+
+    resultado = {
+        "descripcion": descripcion.upper(),
+        "codigo_prediccion": codigo_prediccion if codigo_prediccion is not None else "Sin predicción",
+        "descripcion_csv": descripcion_csv,
+        "cantidad": cantidad,
+        "imagen": imagen,
+        "exactitud": exactitud,
+        "id_article": id_article,
+        "correo_id": correo_id,
+        "IDWorkOrder": audio_info.get("IDWorkOrder") if audio_info else "",
+        "IDEmployee": audio_info.get("IDEmployee") if audio_info else "",
+        "FileMP3": file_mp3,
+        "FileName": file_name  # Se conserva el nombre original, pero con la extensión corregida
+    }
+    return resultado
+
+
+
 
 def actualizar_modelo(descripcion: str, seleccion: str):
     global model, vectorizer, todas_las_clases, df, descripciones_confirmadas
@@ -391,49 +547,16 @@ def backup_model(ruta_original: str, ruta_backup_dir: str):
     shutil.copy2(ruta_original, nombre_backup)
 
 def inicializar_modelo():
-    global model, vectorizer, todas_las_clases, df_lookup, descripciones_confirmadas, df
-    model, vectorizer = cargar_modelo(RUTA_MODELO)
-    X_train, y_train, df_train = cargar_datos(RUTA_CSV_CLEAN)
-    todas_las_clases = sorted(list(set(y_train)))
-    df = df_train.copy()
+    global todas_las_clases, df_lookup, descripciones_confirmadas, df
+    # Cargar los datos para generar predicciones desde CSV limpio:
+    _, _, df = cargar_datos(RUTA_CSV_CLEAN)    
     if os.path.exists(RUTA_CSV):
-        df_lookup = pd.read_csv(RUTA_CSV)
+        df_lookup = pd.read_csv(RUTA_CSV, usecols=["CodArticle", "Description", "IDArticle"])
+        logging.info(f"df_lookup cargado con {len(df_lookup)} registros")
     else:
         df_lookup = pd.DataFrame()
     descripciones_confirmadas = cargar_descripciones_confirmadas(RUTA_DESC_CONFIRMADAS_PKL)
-    # Si no existe un modelo, en esta versión no se entrena uno nuevo por no utilizar embeddings.
-    if model is None or vectorizer is None:
-        model, vectorizer = None, None
-        guardar_modelo({"model": model, "vectorizer": vectorizer}, None, RUTA_MODELO)
-    backup_model(RUTA_MODELO, RUTA_BACKUP)
-
-
-
-def mostrar_correos_no_leidos():
-    """
-    Obtiene y muestra en consola los correos sin leer junto con su contenido.
-    """
-    token = obtener_token()
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json",
-    }
-    # Puedes ajustar el filtro según necesites
-    filtro = "isRead eq false"
-    endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/mailFolders/Inbox/messages"
-    params = {"$filter": filtro, "$top": "100"}
-    
-    response = requests.get(endpoint, headers=headers, params=params)
-    if response.status_code == 200:
-        messages = response.json().get("value", [])
-        for message in messages:
-            correo_id = message.get("id", "Sin ID")
-            cuerpo = message.get("body", {}).get("content", "")
-            # Si el contenido es HTML, extraemos solo el texto
-            if message.get("body", {}).get("contentType", "").lower() == "html":
-                cuerpo = BeautifulSoup(cuerpo, "html.parser").get_text()
-    else:
-        print(f"Error al obtener los correos: {response.status_code} - {response.text}")
+    logging.info(f"descripciones_confirmadas: {descripciones_confirmadas}")
 
 
 app = Flask(__name__, static_folder='static')
@@ -505,14 +628,23 @@ historial_predicciones = []
 predicciones_lock = Lock()
 
 
-def procesar_producto(producto: list) -> dict:
-    descripcion, cantidad, correo_id, audio_base64, id_work_order, id_employee, file_name_original = producto
-    descripcion_procesada = procesar_texto(descripcion)
-    logging.info(f"Procesando producto del correo {correo_id}: Descripción original '{descripcion}', Procesada '{descripcion_procesada}'")
+def procesar_producto(producto: dict) -> dict:
+    descripcion = producto["descripcion"]
+    cantidad = producto["cantidad"]
+    correo_id = producto["correo_id"]
+    audio_info = producto["audio"]
+
+    logging.info(f"[procesar_producto] Procesando producto del correo {correo_id}")
+    logging.info(f"[procesar_producto] Descripción recibida: '{descripcion}'")
     
+    descripcion_procesada = procesar_texto(descripcion)
+    logging.info(f"[procesar_producto] Descripción procesada: '{descripcion_procesada}'")
+
+    # Se determina si ya existe una predicción confirmada
     if descripcion_procesada in descripciones_confirmadas:
         codigo_prediccion = descripciones_confirmadas[descripcion_procesada]
         exactitud = 100
+        logging.info(f"[procesar_producto] Predicción confirmada encontrada: {codigo_prediccion}")
     else:
         resultado_prediccion = modelo_predecir(descripcion)
         codigo_prediccion = resultado_prediccion.get("codigo_prediccion")
@@ -522,9 +654,12 @@ def procesar_producto(producto: list) -> dict:
             tfidf_matrix = vectorizador_similitud.fit_transform([descripcion_procesada, descripcion_csv_predicha])
             cosine_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
             exactitud = int(min((cosine_sim + 0.15) * 100, 100))
+            logging.info(f"[procesar_producto] Predicción calculada: {codigo_prediccion} con exactitud {exactitud}%")
         else:
             exactitud = 0
+            logging.warning(f"[procesar_producto] Código predicho no se encontró en df: {codigo_prediccion}")
 
+   
     if not df_lookup.empty:
         registros = df_lookup[df_lookup["CodArticle"] == codigo_prediccion]
         descripcion_csv = registros["Description"].iloc[0] if not registros.empty else "Descripción no encontrada"
@@ -533,43 +668,39 @@ def procesar_producto(producto: list) -> dict:
             imagen_temp = registros["Image"].iloc[0]
             if pd.isna(imagen_temp):
                 imagen = ""
-            elif isinstance(imagen_temp, str) and (imagen_temp.startswith("b'") or imagen_temp.startswith('b"')):
+            elif isinstance(imagen_temp, str) and (imagen_temp.startswith("b") or imagen_temp.startswith('b"')):
                 try:
                     imagen_bytes = ast.literal_eval(imagen_temp)
                     imagen_base64 = base64.b64encode(imagen_bytes).decode("utf-8")
                     imagen = imagen_base64
                 except Exception as e:
-                    logging.error("Error al convertir la imagen a base64: %s", e)
+                    logging.error(f"[procesar_producto] Error al convertir imagen a base64: {e}")
                     imagen = ""
             else:
                 imagen = imagen_temp
-        id_article_arr = df[df["CodArticle"] == codigo_prediccion]["IDArticle"].values
+        id_article_arr = df_lookup[df_lookup["CodArticle"] == codigo_prediccion]["IDArticle"].values
         id_article = id_article_arr[0] if len(id_article_arr) > 0 else None
     else:
         descripcion_csv = "Descripción no encontrada"
         imagen = ""
         id_article = None
 
-    # Detectar el formato del audio dinámicamente
-    formato_audio = "mp4"  # Valor por defecto
-    if file_name_original:
-        _, extension = os.path.splitext(file_name_original)
-        formato_audio = extension.lstrip(".").lower() if extension else "mp4"
-    logging.info(f"Formato de audio detectado: {formato_audio}")
+    formato_audio = "mp4"
+    file_name = f"{audio_info.get('IDWorkOrder')}_{audio_info.get('IDEmployee')}_{formato_audio}"
 
     resultado = {
         "descripcion": descripcion.upper(),
-        "codigo_prediccion": codigo_prediccion,
+        "codigo_prediccion": codigo_prediccion if codigo_prediccion is not None else "Sin predicción",
         "descripcion_csv": descripcion_csv,
         "cantidad": cantidad,
         "imagen": imagen,
         "exactitud": exactitud,
-        "id_article": codigo_prediccion if 'id_article' not in locals() else id_article,
+        "id_article": id_article,
         "correo_id": correo_id,
-        "IDWorkOrder": id_work_order,
-        "IDEmployee": id_employee,
-        "audio_base64": audio_base64,
-        "file_name": f"{id_work_order}_{id_employee}_{formato_audio}"
+        "IDWorkOrder": audio_info.get("IDWorkOrder"),
+        "IDEmployee": audio_info.get("IDEmployee"),
+        "audio_base64": audio_info.get("audio_base64", ""),
+        "file_name": file_name
     }
     return resultado
 
@@ -578,10 +709,10 @@ def actualizar_predicciones_periodicamente():
     Actualiza las predicciones de forma periódica procesando correos recibidos.
     """
     global predicciones_recientes, historial_predicciones
+    
     while True:
         try:
             productos = procesar_correos()
-            mostrar_correos_no_leidos()
             nuevas_predicciones = [procesar_producto(producto) for producto in productos]
             with predicciones_lock:
                 predicciones_recientes.clear()
@@ -592,15 +723,15 @@ def actualizar_predicciones_periodicamente():
         time.sleep(60)
 
 
-@app.route("/api/marcar_leido", methods=["POST"])
 def marcar_correo_leido():
     data = request.get_json()
-    correo_id = data.get("correo_id")
-    if not correo_id:
+    email_id = data.get("correo_id")
+    if not email_id:
         return jsonify({"error": "ID del correo no proporcionado"}), 400
     try:
-        marcar_email_como_leido(correo_id)
-        return jsonify({"message": "Correo marcado como leído"}), 200
+        marcar_email_como_leido(email_id)
+        
+        return jsonify({"message": "Correo marcado como leído y datos limpiados"}), 200
     except Exception as e:
         return jsonify({"error": f"No se pudo marcar el correo como leído: {e}"}), 500
 
@@ -609,9 +740,7 @@ def obtener_predicciones():
     global predicciones_recientes
     with predicciones_lock:
         predicciones = predicciones_recientes.copy()
-    logging.info(f"Enviando {len(predicciones)} predicciones a la API, incluyendo audio_base64")
     return jsonify(predicciones), 200
-
 @app.route("/")
 def serve_react():
     return send_from_directory(app.static_folder, "index.html")

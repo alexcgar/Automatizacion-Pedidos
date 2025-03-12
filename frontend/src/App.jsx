@@ -105,7 +105,7 @@ function App() {
       </div>
       <div className="row">
         <div className="col-12 p-4">
-          <AudioRecorder setAudioBase64={setAudioBase64} />
+          <AudioRecorder setAudioBase64={setAudioBase64} idBoton={idBoton} />
         </div>
       </div>
       <div className="row mt-auto">

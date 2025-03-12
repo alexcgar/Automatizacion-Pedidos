@@ -71,7 +71,8 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
   const [albaranesData, setAlbaranesData] = useState([]);
   const [ubicacionesData, setUbicacionesData] = useState([]);
   const [mp3Ids, setMp3Ids] = useState([]);
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [selectedPart, setSelectedPart] = useState(null);
+  const [selectedAlbaran, setSelectedAlbaran] = useState(null);
   const [partesData, setPartesData] = useState([]);
 
   const { apiCall: apiCallAlbaranes } = useApiCall();
@@ -169,8 +170,11 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
 
   const generateEntityFromPredictions = useCallback(
     async (prediccionesArray) => {
+      console.log("Predicciones obtenidas:", prediccionesArray);
+
       // Agrupar predicciones por correo_id
       const groupedPredictions = prediccionesArray.reduce((acc, prediccion) => {
+        console.log("Predicción original:", prediccion);
         const { correo_id } = prediccion;
         if (!acc[correo_id]) {
           acc[correo_id] = [];
@@ -184,41 +188,45 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
           exactitud: prediccion.exactitud,
           id_article: prediccion.id_article || prediccion.codigo_prediccion,
           correo_id: prediccion.correo_id,
+          audio_base64: prediccion.audio_base64,
+          file_name: prediccion.file_name,
+          IDEmployee: prediccion.IDEmployee,
+          IDWorkOrder: prediccion.IDWorkOrder,
         });
         return acc;
       }, {});
   
       // Generar una entidad por cada grupo de predicciones
       for (const [correo_id, predictions] of Object.entries(groupedPredictions)) {
-        const firstPrediction = prediccionesArray.find(p => p.correo_id === correo_id);
-        if (!firstPrediction.audio_base64) {
-          console.warn("No se encontró audio_base64 en la predicción:", firstPrediction);
-          continue;
-        }
+        // Utiliza el primer elemento del grupo para los datos
+        const firstPrediction = predictions[0];
+        // Si firstPrediction tiene correo_id, úsalo como IDMessage;
+        // de no existir, se puede usar la key del grupo.
+        const IDMessage = firstPrediction.correo_id || correo_id || "Desconocido";
   
         const entityData = {
           CodCompany: "1",
           IDWorkOrder: firstPrediction.IDWorkOrder || "0222",
           IDEmployee: firstPrediction.IDEmployee || "1074241204161431",
-          IDMessage: correo_id || "Desconocido",
-          TextTranscription: JSON.stringify(predictions), // Array de todas las predicciones
+          IDMessage, // Aseguramos que se envíe el valor correcto
+          TextTranscription: JSON.stringify(predictions),
           FileMP3: firstPrediction.audio_base64,
           FileIMG: firstPrediction.imagen || "Desconocido",
           FileName: firstPrediction.file_name || "unknown_audio.mp4",
         };
   
-        console.log("Enviando entidad con datos:", entityData);
+        console.log("Entidad a enviar:", entityData);
   
         try {
           const entityResponse = await apiCallPredicciones(generateEntity, entityData);
           if (entityResponse) {
-            console.log("Entidad generada exitosamente para correo_id:", correo_id);
-            await marcarCorreoComoLeido(correo_id);
+            console.log("Entidad generada exitosamente para IDMessage:", IDMessage);
+            await marcarCorreoComoLeido(IDMessage);
           } else {
-            console.warn("No se obtuvo respuesta para la entidad de correo_id:", correo_id);
+            console.warn("No se obtuvo respuesta para la entidad de IDMessage:", IDMessage);
           }
         } catch (error) {
-          console.warn("Error al generar la entidad para correo_id:", correo_id, error);
+          console.warn("Error al generar la entidad para IDMessage:", IDMessage, error);
         }
       }
       console.log("Actualizando datos MP3 tras generar entidades...");
@@ -264,6 +272,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
       }
 
       console.log("Predicciones obtenidas:", prediccionesArray);
+      
       await generateEntityFromPredictions(prediccionesArray);
     },
     [apiCallPredicciones, generateEntityFromPredictions]
@@ -275,7 +284,6 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
       if (email && password) {
         const userInfo = await apiCallAlbaranes(fetchLoginUser, "1", email, password);
         if (userInfo) {
-          console.log("IDWarehouse obtenido:", userInfo.IDWarehouse);
           setIdWarehouse(userInfo.IDWarehouse);
         }
       }
@@ -336,12 +344,12 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
         {partesData
           .sort((a, b) => b.Total - a.Total)
           .map((item, index) => (
-            <React.Fragment key={index}>
+            <React.Fragment key={index + "partes"}>
               <tr
                 className="text-center"
                 onClick={() =>
-                  setSelectedEmployee(
-                    selectedEmployee?.IDEmployee === item.IDEmployee ? null : item
+                  setSelectedPart(
+                    selectedPart?.IDEmployee === item.IDEmployee ? null : item
                   )
                 }
                 style={{ cursor: "pointer" }}
@@ -349,7 +357,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
                 <td>{item.Description}</td>
                 <td>{item.Total}</td>
               </tr>
-              {selectedEmployee && selectedEmployee.IDEmployee === item.IDEmployee && (
+              {selectedPart && selectedPart.IDEmployee === item.IDEmployee && (
                 <tr>
                   <td colSpan="2">
                     <div className="child-table mt-2">
@@ -455,12 +463,12 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
         {albaranesData
           .sort((a, b) => b.Items.length - a.Items.length)
           .map((item, index) => (
-            <React.Fragment key={index}>
+            <React.Fragment key={index + "albaranes"}>
               <tr
                 className="text-center"
                 onClick={() =>
-                  setSelectedEmployee(
-                    selectedEmployee?.Description === item.Description ? null : item
+                  setSelectedAlbaran(
+                    selectedAlbaran?.Description === item.Description ? null : item
                   )
                 }
                 style={{ cursor: "pointer" }}
@@ -468,7 +476,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
                 <td>{item.Description}</td>
                 <td>{item.Items.length}</td>
               </tr>
-              {selectedEmployee?.Description === item.Description && (
+              {selectedAlbaran?.Description === item.Description && (
                 <tr>
                   <td colSpan="2">
                     <div className="child-table mt-2">
@@ -512,7 +520,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
       </thead>
       <tbody>
         {ubicacionesData.map((item, index) => (
-          <tr key={index}>
+          <tr key={index + "ubicaciones"} >
             <td>{item.Item}</td>
             <td>{item.Description}</td>
             <td>{item.DateString}</td>

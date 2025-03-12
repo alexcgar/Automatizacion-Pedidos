@@ -128,6 +128,7 @@ export const generateEntity = async (entityData) => {
     );
 
     if (response.data && response.data.success) {
+      console.log('API Response:', response.data); // Log the response data
       return response.data;
     } else {
       console.error('Respuesta del servidor:', response.data);

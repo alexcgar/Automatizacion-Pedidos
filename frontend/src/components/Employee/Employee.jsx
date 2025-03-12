@@ -74,16 +74,17 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
         setIsLoading(false);
         return;
       }
-  
+
       if (!entityData) {
         console.error("No hay datos de la entidad.");
         setIsLoading(false);
         return;
       }
-  
+
       const orderData = {
         CodCompany: "1",
         IDAudioMP3ToOrderSL: entityData[0].IDAudioMP3ToOrderSL,
+        IDSite: entityData[0].IDSite, // Incluir IDSite en los datos del pedido
         TextPrediction: entityData[0].TextTranscription
           .map(
             (prediction) =>
@@ -97,12 +98,12 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
             Quantity: producto.cantidad,
           })),
       };
-  
+
       console.log("Generando pedido:", orderData);
       const orderResponse = await generateOrder(orderData);
       console.log("Pedido generado exitosamente:", orderResponse);
       setOrderGenerated(orderResponse);
-  
+
       const correoId = entityData[0].TextTranscription[0]?.correo_id;
       if (correoId) {
         try {
@@ -114,7 +115,7 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
           console.error("Error al marcar el correo como leído:", markError.message);
         }
       }
-  
+
       setTimeout(() => {
         setIsLoggedIn(false);
       }, 60000);
@@ -125,8 +126,20 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
       setIsLoading(false);
     }
   };
+
   return (
     <div>
+      <style>
+        {`
+          .table-bordered {
+            border: 0.5px solid grey !important;
+          }
+          .table-bordered th,
+          .table-bordered td {
+            border: 0 !important;
+          }
+        `}
+      </style>
       {error && <p className="text-danger">Error: {error}</p>}
       {employeeInfo ? (
         <Table
@@ -134,16 +147,26 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
           bordered
           hover
           variant="light"
-          className="border border-5 m-1 mb-"
+          className="table-bordered m-1"
           style={{ fontSize: "1.1rem" }}
         >
           <thead>
             <tr>
-              <th><strong>EMPLEADO</strong></th>
-              <th><strong>ORDEN DE TRABAJO</strong></th>
-              <th><strong>CLIENTE</strong></th>
-              <th><strong>FINCA</strong></th>
-              <th><strong>PROYECTO</strong></th>
+              <th>
+                <strong>EMPLEADO</strong>
+              </th>
+              <th>
+                <strong>ORDEN DE TRABAJO</strong>
+              </th>
+              <th>
+                <strong>CLIENTE</strong>
+              </th>
+              <th>
+                <strong>FINCA</strong>
+              </th>
+              <th>
+                <strong>PROYECTO</strong>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -152,7 +175,10 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
               <td>{employeeInfo.CodWorkOrder}</td>
               <td>{employeeInfo.DesCustomer}</td>
               <td>{employeeInfo.DesCustomerDeliveryAddress}</td>
-              <td>{employeeInfo.CodProject} {employeeInfo.VersionProject} {employeeInfo.DesProject}</td>
+              <td>
+                {employeeInfo.CodProject} {employeeInfo.VersionProject}{" "}
+                {employeeInfo.DesProject}
+              </td>
             </tr>
           </tbody>
         </Table>
@@ -161,9 +187,12 @@ const Employee = ({ productos = [], setIsLoggedIn, idBoton }) => {
       )}
       {orderGenerated && (
         <Alert variant="success" className="text-center mt-1">
-          <strong>Pedido generado correctamente.</strong><br />
-          <strong>Código de Pedido:</strong> {orderGenerated.data.CodOrder}<br />
-          <strong>Fecha de Pedido:</strong> {new Date(orderGenerated.data.OrderDate).toLocaleDateString()}
+          <strong>Pedido generado correctamente.</strong>
+          <br />
+          <strong>Código de Pedido:</strong> {orderGenerated.data.CodOrder}
+          <br />
+          <strong>Fecha de Pedido:</strong>{" "}
+          {new Date(orderGenerated.data.OrderDate).toLocaleDateString()}
         </Alert>
       )}
       {isLoading && (

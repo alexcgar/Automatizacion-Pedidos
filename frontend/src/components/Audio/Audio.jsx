@@ -85,13 +85,13 @@ const AudioPlayer = ({ setAudioBase64, idBoton }) => {
       <Button
         className="mb-1"
         onClick={() => setOpen(!open)}
-        style={{ backgroundColor: "#283746", width: "100%", fontSize: "1.1rem" }}
+        style={{ backgroundColor: "#283746", width: "100%", fontSize: "1.1rem", border: "1px solid black", boxShadow: "none" }}
       >
         {open ? "Cerrar Detalles" : "Ver Detalles del Audio"}
       </Button>
       <Collapse in={open}>
         <div className="nova2 text-white">
-          <Table bordered className="text-white">
+          <Table className="text-white" style={{border: "1px solid black"}}>
             <thead>
               <tr>
                 <th className="text-white"></th>
@@ -102,7 +102,7 @@ const AudioPlayer = ({ setAudioBase64, idBoton }) => {
               <tr>
                 <td style={{ width: "100%" }}>
                   {audioUrl ? (
-                    <CustomAudioPlayer audioUrl={audioUrl} />
+                    <CustomAudioPlayer  audioUrl={audioUrl} />
                   ) : (
                     <p>No hay audio disponible</p>
                   )}

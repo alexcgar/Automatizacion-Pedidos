@@ -49,31 +49,32 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
         const productosProcesados = result.data
           .map((item) => {
             const transcriptionData = JSON.parse(item.TextTranscription);
-            // Si es un array, lo mapeamos; si es un objeto, lo tratamos como un solo elemento
             return Array.isArray(transcriptionData)
               ? transcriptionData.map((transcription) => ({
-                correo_id: transcription.correo_id,
-                cantidad: Number(transcription.cantidad),
-                codigo_prediccion: transcription.codigo_prediccion,
-                descripcion: transcription.descripcion || "Sin descripción",
-                descripcion_csv: transcription.descripcion_csv || "",
-                id_article: transcription.id_article,
-                exactitud: transcription.exactitud || 0,
-                imagen: transcription.imagen || null,
-              }))
+                  correo_id: transcription.correo_id,
+                  cantidad: Number(transcription.cantidad),
+                  codigo_prediccion: transcription.codigo_prediccion,
+                  descripcion: transcription.descripcion || "Sin descripción",
+                  descripcion_csv: transcription.descripcion_csv || "",
+                  id_article: transcription.id_article,
+                  exactitud: transcription.exactitud || 0,
+                  imagen: transcription.imagen || null,
+                  seleccionEnviada: false, // Campo para rastrear confirmación
+                }))
               : [
-                {
-                  correo_id: transcriptionData.correo_id,
-                  cantidad: Number(transcriptionData.cantidad),
-                  codigo_prediccion: transcriptionData.codigo_prediccion,
-                  descripcion:
-                    transcriptionData.descripcion || "Sin descripción",
-                  descripcion_csv: transcriptionData.descripcion_csv || "",
-                  id_article: transcriptionData.id_article,
-                  exactitud: transcriptionData.exactitud || 0,
-                  imagen: transcriptionData.imagen || null,
-                },
-              ];
+                  {
+                    correo_id: transcriptionData.correo_id,
+                    cantidad: Number(transcriptionData.cantidad),
+                    codigo_prediccion: transcriptionData.codigo_prediccion,
+                    descripcion:
+                      transcriptionData.descripcion || "Sin descripción",
+                    descripcion_csv: transcriptionData.descripcion_csv || "",
+                    id_article: transcriptionData.id_article,
+                    exactitud: transcriptionData.exactitud || 0,
+                    imagen: transcriptionData.imagen || null,
+                    seleccionEnviada: false, // Campo para rastrear confirmación
+                  },
+                ];
           })
           .flat();
         setProductos(productosProcesados);
@@ -95,10 +96,9 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
         const datosProcesados = data.data.map((item) => ({
           CodArticle: item.CodArticle,
           Description: item.Description,
-          IDArticle: item.IDArticle, // Capturamos el IDArticle
+          IDArticle: item.IDArticle,
           Combined: `${item.CodArticle} - ${item.Description}`,
         }));
-        console.log("Datos CSV procesados:", datosProcesados); // Depuración
         setDatosCSV(datosProcesados);
       } else {
         console.error("Error al cargar el CSV:", data);
@@ -120,7 +120,7 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
     setProductosSeleccionados(productos);
   }, [productos, setProductosSeleccionados]);
 
-  // Función para confirmar automáticamente sin actualizar el input (busquedas)
+  // Función para confirmar automáticamente sin actualizar el input de búsqueda
   const manejarSeleccionChangeAuto = async (
     selectedOption,
     codigoPrediccion,
@@ -128,46 +128,32 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
     descripcion
   ) => {
     const descripcionArticulo = combinedValue.split(" - ")[1]?.trim() || "";
-    const selectedItem = datosCSV.find(item => item.CodArticle === selectedOption);
+    const selectedItem = datosCSV.find((item) => item.CodArticle === selectedOption);
     const productosActualizados = productos.map((producto) =>
       producto.codigo_prediccion === codigoPrediccion
         ? {
             ...producto,
             codigo_prediccion: selectedOption,
             descripcion_csv: descripcionArticulo,
-            id_article: selectedItem?.IDArticle || selectedOption, // Usamos IDArticle del CSV
+            id_article: selectedItem?.IDArticle || selectedOption,
+            seleccionEnviada: true, // Marcamos como confirmado
           }
         : producto
     );
     setProductos(productosActualizados);
     try {
       await sendSeleccion(selectedOption, descripcion);
-      setProductos((prevProductos) =>
-        prevProductos.map((p) =>
-          p.codigo_prediccion === codigoPrediccion
-            ? { ...p, seleccionEnviada: true }
-            : p
-        )
-      );
-      setOpcionesBusqueda((prevState) => ({
-        ...prevState,
-        [codigoPrediccion]: [],
-      }));
+      console.log(`Producto ${codigoPrediccion} confirmado automáticamente`);
     } catch (error) {
-      console.error("Error al manejar la selección (auto):", error);
+      console.error("Error al manejar la selección automática:", error);
     }
   };
 
-  // Efecto para confirmar automáticamente solo si la selección aún no ha sido enviada y no se ha procesado auto-selección
+  // Efecto para confirmar automáticamente productos con exactitud > 90%
   useEffect(() => {
-    if (!autoSeleccionada) {
+    if (!autoSeleccionada && productos.length > 0) {
       productos.forEach((producto) => {
-        // Se ejecuta solo si se cumple la condición y la selección no se ha enviado
-        if (
-          producto.exactitud >= 95 &&
-          producto.exactitud < 100 &&
-          !producto.seleccionEnviada
-        ) {
+        if (producto.exactitud > 90 && !producto.seleccionEnviada) {
           manejarSeleccionChangeAuto(
             producto.codigo_prediccion,
             producto.codigo_prediccion,
@@ -176,7 +162,7 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
           );
         }
       });
-      setAutoSeleccionada(true);
+      setAutoSeleccionada(true); // Marcamos que la auto-selección ya se realizó
     }
   }, [productos, autoSeleccionada]);
 
@@ -187,19 +173,19 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
     descripcion
   ) => {
     const descripcionArticulo = combinedValue.split(" - ")[1]?.trim() || "";
-    const selectedItem = datosCSV.find(item => item.CodArticle === selectedOption);
+    const selectedItem = datosCSV.find((item) => item.CodArticle === selectedOption);
     const productosActualizados = productos.map((producto) =>
       producto.codigo_prediccion === codigoPrediccion
         ? {
             ...producto,
             codigo_prediccion: selectedOption,
             descripcion_csv: descripcionArticulo,
-            id_article: selectedItem?.IDArticle || selectedOption, // Usamos IDArticle del CSV
+            id_article: selectedItem?.IDArticle || selectedOption,
+            seleccionEnviada: true, // Marcamos como confirmado
           }
         : producto
     );
     setProductos(productosActualizados);
-    console.log("Producto actualizado:", productosActualizados.find(p => p.codigo_prediccion === codigoPrediccion));
     try {
       await sendSeleccion(selectedOption, descripcion);
       setBusquedas((prevState) => ({
@@ -211,7 +197,7 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
         [codigoPrediccion]: [],
       }));
     } catch (error) {
-      console.error("Error al manejar la selección:", error);
+      console.error("Error al manejar la selección manual:", error);
     }
   };
 
@@ -223,14 +209,12 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
       }));
       return;
     }
-    // Normaliza la búsqueda: elimina caracteres especiales y usa UTF-8
     const busquedaNormalizada = valorBusqueda
       .trim()
       .toLowerCase()
-      .replace(/[^\w\s]/gi, "") // Elimina caracteres como Ø, -, etc.
-      .normalize("NFD") // Normaliza caracteres especiales
-      .replace(/[\u0300-\u036f]/g, ""); // Elimina diacríticos
-    
+      .replace(/[^\w\s]/gi, "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
     const palabrasBusqueda = busquedaNormalizada.split(" ");
     const resultados = datosCSV.filter((item) => {
       const textoObjetivo = `${item.CodArticle} ${item.Description}`
@@ -240,7 +224,6 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
         .replace(/[\u0300-\u036f]/g, "");
       return palabrasBusqueda.every((palabra) => textoObjetivo.includes(palabra));
     });
-    
     setOpcionesBusqueda((prev) => ({
       ...prev,
       [productoId]:
@@ -270,8 +253,17 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
   return (
     <div style={{ width: "100%", padding: "0px" }}>
       <div className="bg-white" style={{ margin: "0 auto" }}>
+        {/* Inline CSS to override the default inside table borders */}
+        <style>
+          {`
+            .table-bordered th,
+            .table-bordered td {
+              border: 0.5px solid grey !important;
+            }
+          `}
+        </style>
         <table
-          className="table table-striped table-bordered border border-5"
+          className="table table-secondary table-bordered "
           style={{
             margin: "0 auto",
             textAlign: "center",
@@ -280,27 +272,13 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
         >
           <thead className="thead-dark">
             <tr>
-              <th>
-                <strong>IMAGEN</strong>
-              </th>
-              <th>
-                <strong>DESCRIPCIÓN TRANSCRITA</strong>
-              </th>
-              <th>
-                <strong>EXACTITUD (%)</strong>
-              </th>
-              <th>
-                <strong>DESCRIPCIÓN PRODUCTO</strong>
-              </th>
-              <th>
-                <strong>CÓDIGO ARTÍCULO</strong>
-              </th>
-              <th>
-                <strong>BUSCAR PRODUCTO</strong>
-              </th>
-              <th>
-                <strong>CANTIDAD</strong>
-              </th>
+              <th><strong>IMAGEN</strong></th>
+              <th><strong>DESCRIPCIÓN TRANSCRITA</strong></th>
+              <th><strong>EXACTITUD (%)</strong></th>
+              <th><strong>DESCRIPCIÓN PRODUCTO</strong></th>
+              <th><strong>CÓDIGO ARTÍCULO</strong></th>
+              <th><strong>BUSCAR PRODUCTO</strong></th>
+              <th><strong>CANTIDAD</strong></th>
             </tr>
           </thead>
           <tbody>
@@ -310,193 +288,129 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
                 exactitud > 60
                   ? "#a5d6a7"
                   : exactitud > 40
-                    ? "#fff59d"
-                    : "#ef9a9a";
+                  ? "#fff59d"
+                  : "#ef9a9a";
 
-                return (
+              return (
                 <tr
                   key={`${producto.codigo_prediccion}-${producto.descripcion}-${index}`}
                 >
-                  <td
-                  style={{
-                    verticalAlign: "middle",
-                    textAlign: "center",
-                  }}
-                  >
-                  {producto.imagen ? (
-                    <img
-                    src={`data:image/jpeg;base64,${limpiarBase64(
-                      producto.imagen
-                    )}`}
-                    className="img-thumbnail"
-                    style={{
-                      width: "70px",
-                      height: "70px",
-                      objectFit: "contain",
-                    }}
-                    alt={`Imagen para ${producto.codigo_prediccion}`}
-                    />
-                  ) : (
-                    <img
-                    src="https://static.vecteezy.com/system/resources/previews/006/059/989/non_2x/crossed-camera-icon-avoid-taking-photos-image-is-not-available-illustration-free-vector.jpg"
-                    className="img-thumbnail"
-                    alt={`Imagen no disponible para el producto ${producto.codigo_prediccion}`}
-                    style={{
-                      width: "70px",
-                      height: "70px",
-                      objectFit: "cover",
-                    }}
-                    />
-                  )}
-                  </td>
-                  <td
-                  style={{
-                    verticalAlign: "middle",
-                    textAlign: "center",
-                  }}
-                  >
-                  {producto.descripcion}
-                  </td>
-                  <td
-                  style={{
-                    backgroundColor: exactitudColor,
-                    color: "black",
-                    verticalAlign: "middle",
-                    textAlign: "center",
-                  }}
-                  >
-                  {producto.exactitud}%
-                  </td>
-                  <td
-                  style={{
-                    verticalAlign: "middle",
-                    textAlign: "center",
-                  }}
-                  >
-                  {producto.descripcion_csv}
-                  </td>
-                  <td
-                  style={{
-                    verticalAlign: "middle",
-                    textAlign: "center",
-                  }}
-                  >
-                  {producto.codigo_prediccion}
-                  </td>
-                  <td
-                  style={{
-                    verticalAlign: "middle",
-                    textAlign: "center",
-                  }}
-                  >
-                  <div className="dropdown-container position-relative">
-                    <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                    }}
-                    >
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="Buscar..."
-                      value={busquedas[producto.codigo_prediccion] || ""}
-                      onChange={(e) =>
-                      manejarInputBusqueda(
-                        e.target.value,
-                        producto.codigo_prediccion
-                      )
-                      }
-                    />
-                    {/* En este caso, no mostramos el botón "Confirmar" */}
-                    </div>
-                    {isLoadingBusqueda[producto.codigo_prediccion] && (
-                    <div>Cargando...</div>
-                    )}
-                    {opcionesBusqueda[producto.codigo_prediccion]?.length >
-                    0 ? (
-                    <ul className="list-group mt-2 dropdown-list">
-                      {opcionesBusqueda[producto.codigo_prediccion].map(
-                      (item) => (
-                        <button
-                        key={item.CodArticle || "no-coincidencia"}
-                        className="list-group-item list-group-item-action p-4"
-                        onClick={() =>
-                          manejarSeleccionChange(
-                          item.CodArticle,
-                          producto.codigo_prediccion,
-                          item.Combined,
-                          producto.descripcion
-                          )
-                        }
-                        >
-                        {item.Combined}
-                        </button>
-                      )
-                      )}
-                    </ul>
+                  <td style={{ verticalAlign: "middle", textAlign: "center" }}>
+                    {producto.imagen ? (
+                      <img
+                        src={`data:image/jpeg;base64,${limpiarBase64(producto.imagen)}`}
+                        className="img-thumbnail"
+                        style={{ width: "70px", height: "70px", objectFit: "contain" }}
+                        alt={`Imagen para ${producto.codigo_prediccion}`}
+                      />
                     ) : (
-                    busquedas[producto.codigo_prediccion]?.trim() && (
-                      <div className="mt-2"></div>
-                    )
+                      <img
+                        src="https://static.vecteezy.com/system/resources/previews/006/059/989/non_2x/crossed-camera-icon-avoid-taking-photos-image-is-not-available-illustration-free-vector.jpg"
+                        className="img-thumbnail"
+                        alt={`Imagen no disponible para el producto ${producto.codigo_prediccion}`}
+                        style={{ width: "70px", height: "70px", objectFit: "cover" }}
+                      />
                     )}
-                  </div>
+                  </td>
+                  <td style={{ verticalAlign: "middle", textAlign: "center" }}>
+                    {producto.descripcion}
                   </td>
                   <td
-                  style={{
-                    verticalAlign: "middle",
-                    textAlign: "center",
-                  }}
+                    style={{
+                      backgroundColor: exactitudColor,
+                      color: "black",
+                      verticalAlign: "middle",
+                      textAlign: "center",
+                    }}
                   >
-                  <input
-                    title="Cantidad"
-                    type="number"
-                    step="0.01" // Establece el incremento a dos decimales
-                    min="0"
-                    className="form-control"
-                    value={producto.cantidad}
-                    onChange={(e) => {
-                    // Permite ingresar manualmente números: reemplaza la coma por punto
-                    let inputValue = e.target.value.replace(',', '.');
-                    
-                    // Validamos que solo tenga dos decimales
-                    const regex = /^\d*\.?\d{0,2}$/;
-                    if (inputValue === '' || regex.test(inputValue)) {
-                      setProductos((prevProductos) =>
-                      prevProductos.map((p) =>
-                        p.codigo_prediccion === producto.codigo_prediccion
-                        ? { ...p, cantidad: inputValue }
-                        : p
-                      )
-                      );
-                    }
-                    }}
-                    onBlur={(e) => {
-                    // Al perder el foco, formatea el valor a dos decimales
-                    let value = e.target.value.replace(',', '.');
-                    let numericValue = parseFloat(value);
-                    if (!isNaN(numericValue)) {
-                      numericValue = Math.round(numericValue * 100) / 100;
-                      // Aseguramos que siempre se muestren dos decimales
-                      numericValue = numericValue.toFixed(2);
-                    } else {
-                      numericValue = 0;
-                      numericValue = numericValue.toFixed(2);
-                    }
-                    setProductos((prevProductos) =>
-                      prevProductos.map((p) =>
-                      p.codigo_prediccion === producto.codigo_prediccion
-                        ? { ...p, cantidad: parseFloat(numericValue) }
-                        : p
-                      )
-                    );
-                    }}
-                  />
-
-
+                    {producto.exactitud}%
+                  </td>
+                  <td style={{ verticalAlign: "middle", textAlign: "center" }}>
+                    {producto.descripcion_csv}
+                  </td>
+                  <td style={{ verticalAlign: "middle", textAlign: "center" }}>
+                    {producto.codigo_prediccion}
+                  </td>
+                  <td style={{ verticalAlign: "middle", textAlign: "center" }}>
+                    <div className="dropdown-container position-relative">
+                      <div style={{ display: "flex", alignItems: "center" }}>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Buscar..."
+                          value={busquedas[producto.codigo_prediccion] || ""}
+                          onChange={(e) =>
+                            manejarInputBusqueda(e.target.value, producto.codigo_prediccion)
+                          }
+                        />
+                      </div>
+                      {isLoadingBusqueda[producto.codigo_prediccion] && (
+                        <div>Cargando...</div>
+                      )}
+                      {opcionesBusqueda[producto.codigo_prediccion]?.length > 0 && (
+                        <ul className="list-group mt-2 dropdown-list">
+                          {opcionesBusqueda[producto.codigo_prediccion].map((item) => (
+                            <button
+                              key={item.CodArticle || "no-coincidencia"}
+                              className="list-group-item list-group-item-action p-4"
+                              onClick={() =>
+                                manejarSeleccionChange(
+                                  item.CodArticle,
+                                  producto.codigo_prediccion,
+                                  item.Combined,
+                                  producto.descripcion
+                                )
+                              }
+                            >
+                              {item.Combined}
+                            </button>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ verticalAlign: "middle", textAlign: "center" }}>
+                    <input
+                      title="Cantidad"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="form-control"
+                      value={producto.cantidad}
+                      onChange={(e) => {
+                        let inputValue = e.target.value.replace(",", ".");
+                        const regex = /^\d*\.?\d{0,2}$/;
+                        if (inputValue === "" || regex.test(inputValue)) {
+                          setProductos((prevProductos) =>
+                            prevProductos.map((p) =>
+                              p.codigo_prediccion === producto.codigo_prediccion
+                                ? { ...p, cantidad: inputValue }
+                                : p
+                            )
+                          );
+                        }
+                      }}
+                      onBlur={(e) => {
+                        let value = e.target.value.replace(",", ".");
+                        let numericValue = parseFloat(value);
+                        if (!isNaN(numericValue)) {
+                          numericValue = Math.round(numericValue * 100) / 100;
+                          numericValue = numericValue.toFixed(2);
+                        } else {
+                          numericValue = "0.00";
+                        }
+                        setProductos((prevProductos) =>
+                          prevProductos.map((p) =>
+                            p.codigo_prediccion === producto.codigo_prediccion
+                              ? { ...p, cantidad: parseFloat(numericValue) }
+                              : p
+                          )
+                        );
+                      }}
+                    />
                   </td>
                 </tr>
-                );
+              );
             })}
           </tbody>
         </table>
