@@ -49,7 +49,6 @@ SCOPES = ["https://graph.microsoft.com/.default"]
 
 # Definir rutas de archivos y carpetas (he usado os.path.join para que sea compatible con Windows y Linux)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RUTA_MODELO = os.path.join(BASE_DIR, "modelo_actualizado.joblib")
 RUTA_CSV_CLEAN = os.path.join(BASE_DIR, "consulta_resultado_clean.csv")
 RUTA_CSV = os.path.join(BASE_DIR, "consulta_resultado.csv")
 RUTA_DESC_CONFIRMADAS_PKL = os.path.join(BASE_DIR, "descripciones_confirmadas.joblib")
@@ -122,24 +121,27 @@ def procesar_correos():
     filtro = "isRead eq false and hasAttachments eq true"
     endpoint = f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/mailFolders/Inbox/messages"
     params = {"$filter": filtro, "$expand": "attachments", "$top": "100"}
-
+    
     response = requests.get(endpoint, headers=headers, params=params)
     if response.status_code != 200:
         logging.error(f"Error al obtener los correos: {response.status_code} - {response.text}")
         raise Exception(f"Error al obtener los correos: {response.status_code} - {response.text}")
-
+    
     messages = response.json().get("value", [])
     productos = []
     logging.info(f"Encontrados {len(messages)} correos no leídos con adjuntos para procesar.")
-
+    
     for message in messages:
         correo_id = message.get("id", "Sin ID")
         attachments = message.get("attachments", [])
+        audio_info = None
         for att in attachments:
             nombre_archivo = att.get("name", "")
             if nombre_archivo.lower().endswith((".mp3", ".mp4")):
                 logging.info(f"Procesando archivo de audio del correo {correo_id}: {nombre_archivo}")
                 dato1, dato2 = extraer_datos_del_nombre(nombre_archivo)
+                if "-" in dato1:
+                    dato1 = dato1.replace("-", "/")
                 attachment_id = att.get("id")
                 adjunto_endpoint = (
                     f"https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/messages/{correo_id}"
@@ -153,20 +155,20 @@ def procesar_correos():
                         "audio_base64": audio_base64,
                         "IDWorkOrder": dato1,
                         "IDEmployee": dato2,
-                        "nombre_audio": formatear_file_name(nombre_archivo)  # Asegura que tenga la extensión correcta
+                        "nombre_audio": nombre_archivo # Asegura que tenga la extensión correcta
                     }
                     logging.info(f"Audio procesado en memoria para {correo_id}: tamaño {len(audio_base64)} caracteres")
                 else:
                     logging.error(f"Error al descargar audio {nombre_archivo} del correo {correo_id}")
                 break  # Procesamos solo el primer audio encontrado
-
+        
         # Procesar el cuerpo del correo
         cuerpo = message.get("body", {}).get("content", "")
         if message.get("body", {}).get("contentType", "").lower() == "html":
             soup = BeautifulSoup(cuerpo, "html.parser")
             cuerpo = soup.get_text()
         extracted_items = extract_body_message(cuerpo, correo_id)
-
+        
         for item in extracted_items:
             producto_info = {
                 "descripcion": item[0],
@@ -175,14 +177,12 @@ def procesar_correos():
                 "audio": audio_info if audio_info else {}
             }
             productos.append(producto_info)
-
+        
         try:
             marcar_email_como_leido(correo_id)
         except Exception as e:
             logging.error(f"Error marcando como leído el correo {correo_id}: {e}")
-
-        # No es necesario asignar audio_info = None aquí si ya está local al ciclo
-
+    
     logging.info(f"Procesamiento completado, total de productos extraídos: {len(productos)}.")
     return productos
 
@@ -277,6 +277,10 @@ def descargar_audio_desde_correo():
                 if nombre_archivo.lower().endswith((".mp3", ".mp4")):  # Soporte para mp3 y mp4
                     logging.info(f"Procesando archivo de audio del correo {correo_id}: {nombre_archivo}")
                     dato1, dato2 = extraer_datos_del_nombre(nombre_archivo)
+                    nombre_archivo = dato1 + "_" + dato2 + ".mp4"
+                    if dato1 and '-' in dato1:
+                        dato1 = dato1.replace("-", "/")
+                    
                     attachment_id = attachment.get("id")
                     adjunto_endpoint = f'https://graph.microsoft.com/v1.0/users/{USER_EMAIL}/messages/{correo_id}/attachments/{attachment_id}/$value'
                     adjunto_response = requests.get(adjunto_endpoint, headers=headers)
@@ -315,15 +319,19 @@ def marcar_email_como_leido(email_id):
 
 def procesar_texto(texto: str) -> str:
     """
-    Normaliza el texto: reemplaza sinónimos, elimina caracteres especiales y elimina stop words.
+    Normaliza el texto: elimina caracteres especiales y stop words, y finalmente reemplaza sinónimos.
     
     Args:
         texto (str): Texto original.
     
     Returns:
         str: Texto procesado.
+    
     """
+      # Reemplazar sinónimos después de procesar el texto
+    texto = texto.lower()
     texto = str(texto)
+
     sinonimos = {
         "pegamento": "adhesivo",
         "cola": "adhesivo",
@@ -337,41 +345,51 @@ def procesar_texto(texto: str) -> str:
         "pp": "polipropileno",
         "polipropileno": "pp",
         "polietileno": "pe",
-        
+        "galvanizado": "galvaniz",
+        "por": "-",
         
         # Agregar más sinónimos según se requiera.
     }
-    for palabra, reemplazo in sinonimos.items():
-        texto = re.sub(rf"\b{palabra}\b", reemplazo, texto, flags=re.IGNORECASE)
     
-    texto = texto.lower()
     texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("utf-8")
-    texto = re.sub(r"\b(dispensadores)\b", r"dispensador", texto)
     texto = re.sub(r"[^\w\s]", "", texto, flags=re.UNICODE)
     texto = re.sub(r"\b(\w+)(es|s)\b", r"\1", texto)
+    # Eliminar stop words
     palabras = texto.split()
-    return " ".join([palabra for palabra in palabras if palabra not in STOP_WORDS])
+    palabras = [palabra for palabra in palabras if palabra not in STOP_WORDS]
+    texto_procesado = " ".join(palabras)
 
-def guardar_modelo(modelo, vectorizer, ruta_modelo: str):
-    joblib.dump({"model": modelo, "vectorizer": vectorizer}, ruta_modelo)
+  
+    for palabra, reemplazo in sinonimos.items():
+        texto_procesado = re.sub(rf"\b{palabra}\b", reemplazo, texto_procesado, flags=re.IGNORECASE)
+    return texto_procesado
+
+
 
 def guardar_descripciones_confirmadas(ruta_pkl: str, ruta_json: str):
     joblib.dump(descripciones_confirmadas, ruta_pkl)
     with open(ruta_json, "w", encoding="utf-8") as f:
         json.dump(descripciones_confirmadas, f, ensure_ascii=False, indent=4)
 
-def cargar_descripciones_confirmadas(ruta: str):
-    if os.path.exists(ruta):
-        return joblib.load(ruta)
+def cargar_descripciones_confirmadas(ruta):
+    # Verificar si el archivo existe y no está vacío
+    if os.path.exists(ruta) and os.path.getsize(ruta) > 0:
+        try:
+            # Intentar cargar el archivo existente
+            return joblib.load(ruta)
+        except Exception as e:
+            # Si hay un error al cargar, informar y crear un archivo nuevo
+            print(f"Error al cargar {ruta}: {e}. Creando un archivo nuevo.")
+            descripciones_confirmadas = {}
+            joblib.dump(descripciones_confirmadas, ruta)
+            return descripciones_confirmadas
     else:
-        return {}
+        # Si el archivo no existe o está vacío, crear uno nuevo
+        print(f"El archivo {ruta} no existe o está vacío. Creando un archivo nuevo.")
+        descripciones_confirmadas = {}
+        joblib.dump(descripciones_confirmadas, ruta)
+        return descripciones_confirmadas
 
-def cargar_modelo(ruta_modelo):
-    if os.path.exists(ruta_modelo):
-        data = joblib.load(ruta_modelo)
-        return data["model"], data["vectorizer"]
-    else:
-        return None, None
 
 def cargar_datos(ruta_csv: str):
     df_local = pd.read_csv(ruta_csv)
@@ -424,24 +442,7 @@ def modelo_predecir_fuzzy(descripcion: str) -> dict:
             "mensaje": "No se encontró una coincidencia similar",
             "match_method": "fuzzy"
         }
-def formatear_file_name(nombre_audio: str) -> str:
-    """
-    Asegura que el nombre del archivo tenga la extensión .mp4.
-    Si el nombre termina en '_mp4', se reemplaza por '.mp4'.
-    Si ya tiene '.mp4' o no se detecta el sufijo, se deja tal cual o se agrega la extensión.
-    """
-    nombre = nombre_audio.strip()
-    # Si ya tiene la extensión correcta, se retorna
-    if nombre.lower().endswith(".mp4"):
-        return nombre
-    # Si termina con _mp4 (sin punto), se reemplaza
-    if nombre.lower().endswith("_mp4"):
-        return nombre[:-4] + ".mp4" 
-    # Si termina con mp4 pero sin punto (y no tiene _mp4)
-    if nombre.lower().endswith("mp4"):
-        return nombre[:-3] + ".mp4"
-    # Sino, se le agrega la extensión
-    return f"{nombre}.mp4"
+
 
 
 def procesar_producto(producto: dict) -> dict:
@@ -469,7 +470,7 @@ def procesar_producto(producto: dict) -> dict:
             vectorizador_similitud = TfidfVectorizer()
             tfidf_matrix = vectorizador_similitud.fit_transform([descripcion_procesada, descripcion_csv_predicha])
             cosine_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
-            exactitud = int(min((cosine_sim + 0.15) * 100, 100))
+            exactitud = int(min((cosine_sim + 0.19) * 100, 100))
             logging.info(f"[procesar_producto] Predicción calculada: {codigo_prediccion} con exactitud {exactitud}%")
         else:
             exactitud = 0
@@ -503,9 +504,10 @@ def procesar_producto(producto: dict) -> dict:
 
     # Usar el nombre original del audio para FileName, pero formatearlo para tener la extensión correcta
     nombre_audio_original = audio_info.get("nombre_audio", "") if audio_info else ""
-    file_name = formatear_file_name(nombre_audio_original)
+    
     # FileMP3 contendrá el audio en base64
     file_mp3 = audio_info.get("audio_base64", "") if audio_info else ""
+    
 
     resultado = {
         "descripcion": descripcion.upper(),
@@ -519,17 +521,13 @@ def procesar_producto(producto: dict) -> dict:
         "IDWorkOrder": audio_info.get("IDWorkOrder") if audio_info else "",
         "IDEmployee": audio_info.get("IDEmployee") if audio_info else "",
         "FileMP3": file_mp3,
-        "FileName": file_name  # Se conserva el nombre original, pero con la extensión corregida
+        "FileName": nombre_audio_original  # Se conserva el nombre original, pero con la extensión corregida
     }
     return resultado
 
 
-
-
 def actualizar_modelo(descripcion: str, seleccion: str):
-    global model, vectorizer, todas_las_clases, df, descripciones_confirmadas
-    if seleccion not in todas_las_clases:
-        todas_las_clases.append(seleccion)
+    global  vectorizer, df, descripciones_confirmadas
     descripcion_normalizada = procesar_texto(descripcion)
     descripciones_confirmadas[descripcion_normalizada] = seleccion
     guardar_descripciones_confirmadas(RUTA_DESC_CONFIRMADAS_PKL, RUTA_DESC_CONFIRMADAS_JSON)
@@ -540,8 +538,6 @@ def actualizar_modelo(descripcion: str, seleccion: str):
         "Description_Procesada": procesar_texto(descripcion)
     }])
     df = pd.concat([df, nuevo_registro], ignore_index=True)
-    guardar_modelo({"model": model, "vectorizer": vectorizer}, None, RUTA_MODELO)
-    backup_model(RUTA_MODELO, RUTA_BACKUP)
     
 def backup_model(ruta_original: str, ruta_backup_dir: str):
     if not os.path.exists(ruta_backup_dir):
@@ -554,11 +550,11 @@ def backup_model(ruta_original: str, ruta_backup_dir: str):
     shutil.copy2(ruta_original, nombre_backup)
 
 def inicializar_modelo():
-    global todas_las_clases, df_lookup, descripciones_confirmadas, df
+    global  df_lookup, descripciones_confirmadas, df
     # Cargar los datos para generar predicciones desde CSV limpio:
     _, _, df = cargar_datos(RUTA_CSV_CLEAN)    
     if os.path.exists(RUTA_CSV):
-        df_lookup = pd.read_csv(RUTA_CSV, usecols=["CodArticle", "Description", "IDArticle"])
+        df_lookup = pd.read_csv(RUTA_CSV, usecols=["CodArticle", "Description", "IDArticle", "Image"])
         logging.info(f"df_lookup cargado con {len(df_lookup)} registros")
     else:
         df_lookup = pd.DataFrame()
@@ -590,12 +586,12 @@ def cargar_csv():
 
 @app.route("/api/send-seleccion", methods=["POST"])
 def recibir_seleccion():
-    data = request.get_json()
-    seleccion = data.get("seleccion")
-    descripcion = data.get("descripcion")
-    if not descripcion or not seleccion:
-        return jsonify({"error": "Faltan datos en la solicitud."}), 400
+    
     try:
+        data = request.get_json()
+        print(f"Datos recibidos: {data}")
+        seleccion = data.get("seleccion")
+        descripcion = data.get("descripcion")
         actualizar_modelo(descripcion, seleccion)
         # Se asume que las predicciones se actualizarán en segundo plano.
         predicciones_actualizadas = obtener_predicciones()
@@ -688,8 +684,10 @@ def procesar_producto(producto: dict) -> dict:
         id_article = None
 
     formato_audio = "mp4"
-    file_name = f"{audio_info.get('IDWorkOrder')}_{audio_info.get('IDEmployee')}_{formato_audio}"
-
+    file_name = f"{audio_info.get('IDWorkOrder')}_{audio_info.get('IDEmployee')}.{formato_audio}"
+    if "/" in file_name:
+        file_name = file_name.replace("/", "-")
+    
     resultado = {
         "descripcion": descripcion.upper(),
         "codigo_prediccion": codigo_prediccion if codigo_prediccion is not None else "Sin predicción",
@@ -723,7 +721,6 @@ def actualizar_predicciones_periodicamente():
         except Exception as e:
             logging.error("Error actualizando predicciones: %s", e)
         time.sleep(60)
-
 
 def marcar_correo_leido():
     data = request.get_json()

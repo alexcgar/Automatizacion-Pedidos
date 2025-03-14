@@ -127,7 +127,6 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
   const fetchMp3Data = useCallback(async () => {
     try {
       const data = await apiCallMp3(fetchEmployeeInfo, "1", email, "", idSite);
-      console.log("EEEEEEEEEEEEEEEE", idSite);
       let transformedData = [];
       if (Array.isArray(data)) {
         transformedData = data.map((item) => ({
@@ -215,9 +214,8 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
           FileMP3: firstPrediction.audio_base64,
           FileIMG: firstPrediction.imagen || "Desconocido",
           FileName: firstPrediction.file_name || "unknown_audio.mp4",
-          idSite,
         };
-        console.log(idSite);
+        
         console.log("Entidad a enviar:", entityData);
   
         try {
@@ -235,7 +233,7 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
       console.log("Actualizando datos MP3 tras generar entidades...");
       fetchMp3Data();
     },
-    [apiCallPredicciones, fetchMp3Data, idSite]
+    [apiCallPredicciones, fetchMp3Data]
   );
   const fetchPredicciones = useCallback(
     async () => {
@@ -285,16 +283,16 @@ const DashBoard = ({ email, password, onButtonClick, setIsLoggedIn }) => {
   useEffect(() => {
     const fetchData = async () => {
       if (email && password) {
-        const userInfo = await apiCallAlbaranes(fetchLoginUser, "1", email, password);
+        const userInfo = await apiCallAlbaranes(fetchLoginUser, "1", email, password, idSite);
         if (userInfo) {
           setIdWarehouse(userInfo.IDWarehouse);
-          // Asumiendo que el campo viene con el nombre idSite
           setIdSite(userInfo.IDSite);
+          console.log("IDWarehouse y IDSite obtenidos:", userInfo);
         }
       }
     };
     fetchData();
-  }, [email, password, apiCallAlbaranes]);
+  }, [email, password, apiCallAlbaranes, idSite]);
 
   // Efecto para refrescar datos
   useEffect(() => {

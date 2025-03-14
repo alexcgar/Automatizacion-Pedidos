@@ -85,9 +85,18 @@ import pandas as pd
 import re
 
 def clean_dataset(input_path: str, output_path: str):
-    # Cargar el CSV de entrada (consulta_resultado_clean.csv)
+    # Cargar el CSV de entrada
     df = pd.read_csv(input_path)
-    STOP_WORDS = [
+    # Guardar la descripción original proveniente de la base de datos
+    df["Original"] = df["Description"].copy()
+    
+    # Aplicar limpieza sobre la columna Description
+    df['Description'] = df['Description'].str.lower()
+    df['Description'] = df['Description'].apply(
+    lambda x: re.sub(r'[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ\s-]', '', x) if isinstance(x, str) else x
+)
+    df['Description'] = df['Description'].apply(
+    lambda x: ' '.join([word for word in x.split() if word not in [
         "a", "acá", "ahí", "ajena", "ajenas", "ajeno", "ajenos", "al", "algo", "algún",
         "alguna", "algunas", "alguno", "algunos", "allá", "alli", "allí", "ambos", "ampleamos",
         "ante", "antes", "aquel", "aquella", "aquellas", "aquello", "aquellos", "aqui", "aquí",
@@ -122,18 +131,8 @@ def clean_dataset(input_path: str, output_path: str):
         "va", "vais", "valor", "vamos", "van", "varias", "varios", "vaya", "verdad", "verdadera",
         "vosotras", "vosotros", "voy", "vuestra", "vuestras", "vuestro", "vuestros", "y", "ya",
         "yo"
-    ]
-    
-    # Convertir a minúsculas
-    df['Description'] = df['Description'].str.lower()
-    
-    # Aplicar limpieza inicial
-    df['Description'] = df['Description'].apply(
-        lambda x: re.sub(r'[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ\s-]', '', x)
-    )
-    df['Description'] = df['Description'].apply(
-        lambda x: ' '.join([word for word in x.split() if word not in STOP_WORDS])
-    )
+    ]] ) if isinstance(x, str) else x
+)
     df['Description'] = df['Description'].str.replace(r'\bpe\b', 'polietileno', regex=True)
     df['Description'] = df['Description'].str.replace(r'\bpolie\b', 'polietileno', regex=True)
     df['Description'] = df['Description'].str.replace(r'\b(\d+)\s*mm\b', r'\1mm', regex=True)
@@ -141,16 +140,24 @@ def clean_dataset(input_path: str, output_path: str):
     df['Description'] = df['Description'].str.strip()
     df['Description'] = df['Description'].str.replace(r'\s+', ' ', regex=True)
     
-    # Crear lista para las variaciones
+    # Crear lista para almacenar las variaciones
     variaciones = []
     
     for _, row in df.iterrows():
         cod = row["CodArticle"]
-        desc = row["Description"]
         id_art = row["IDArticle"]
+        original = row["Original"]
+        desc = row["Description"]
+        # Si desc no es string, lo convierte a cadena
+        if not isinstance(desc, str):
+            desc = str(desc)
+        
+        # Variación 0: Texto original sin limpieza (de la BBDD)
+        variaciones.append([cod, original, id_art])
         
         # Variación original limpia
-        variaciones.append([cod, desc, id_art])
+        if desc != original:
+            variaciones.append([cod, desc, id_art])
         
         # Variación 1: Reemplazar "polietileno" con "pe"
         variacion1 = desc.replace("polietileno", "pe")
@@ -168,18 +175,16 @@ def clean_dataset(input_path: str, output_path: str):
             variacion3 = f"{palabras[-1]} {' '.join(palabras[:-1])}"
             variaciones.append([cod, variacion3, id_art])
         
-        # Nueva Variación 4: Reducir a la mínima expresión (solo palabras clave)
-        palabras_clave = [palabra for palabra in palabras if re.match(r'\d+|\w{3,}', palabra)]  # Palabras con números o >=3 letras
-        variacion4 = ' '.join(palabras_clave[:2])  # Tomar las 2 primeras palabras clave
+        # Variación 4: Reducir a la mínima expresión (solo palabras clave)
+        palabras_clave = [palabra for palabra in palabras if re.match(r'\d+|\w{3,}', palabra)]
+        variacion4 = ' '.join(palabras_clave[:2])
         if variacion4 != desc and len(palabras_clave) >= 2:
             variaciones.append([cod, variacion4, id_art])
-    
-    # Crear DataFrame con todas las variaciones
-    df_variaciones = pd.DataFrame(variaciones, columns=["CodArticle", "Description", "IDArticle"])
-    
-    # Guardar datos limpios con variaciones en el mismo archivo CSV
-    df_variaciones.to_csv(output_path, index=False)
-    print(f"Datos limpios y variaciones guardados en {output_path}")
+        
+        # Crear DataFrame con todas las variaciones y guardarlo en CSV
+        df_variaciones = pd.DataFrame(variaciones, columns=["CodArticle", "Description", "IDArticle"])
+        df_variaciones.to_csv(output_path, index=False)
+        print(f"Datos limpios y variaciones guardados en {output_path}")
 
 # Ejecutar limpieza
 clean_dataset("backend/model/consulta_resultado_clean.csv", 

@@ -27,6 +27,11 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
   const [datosCSV, setDatosCSV] = useState([]);
   const [autoSeleccionada, setAutoSeleccionada] = useState(false);
 
+  // Función para crear un identificador único
+  const getUniqueId = (producto) => {
+    return `${producto.codigo_prediccion}-${producto.descripcion}`;
+  };
+
   const obtenerProductos = async () => {
     try {
       const response = await axios.post(
@@ -51,30 +56,30 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
             const transcriptionData = JSON.parse(item.TextTranscription);
             return Array.isArray(transcriptionData)
               ? transcriptionData.map((transcription) => ({
-                  correo_id: transcription.correo_id,
-                  cantidad: Number(transcription.cantidad),
-                  codigo_prediccion: transcription.codigo_prediccion,
-                  descripcion: transcription.descripcion || "Sin descripción",
-                  descripcion_csv: transcription.descripcion_csv || "",
-                  id_article: transcription.id_article,
-                  exactitud: transcription.exactitud || 0,
-                  imagen: transcription.imagen || null,
-                  seleccionEnviada: false, // Campo para rastrear confirmación
-                }))
+                correo_id: transcription.correo_id,
+                cantidad: Number(transcription.cantidad),
+                codigo_prediccion: transcription.codigo_prediccion,
+                descripcion: transcription.descripcion || "Sin descripción",
+                descripcion_csv: transcription.descripcion_csv || "",
+                id_article: transcription.id_article,
+                exactitud: transcription.exactitud || 0,
+                imagen: transcription.imagen || null,
+                seleccionEnviada: false, // Campo para rastrear confirmación
+              }))
               : [
-                  {
-                    correo_id: transcriptionData.correo_id,
-                    cantidad: Number(transcriptionData.cantidad),
-                    codigo_prediccion: transcriptionData.codigo_prediccion,
-                    descripcion:
-                      transcriptionData.descripcion || "Sin descripción",
-                    descripcion_csv: transcriptionData.descripcion_csv || "",
-                    id_article: transcriptionData.id_article,
-                    exactitud: transcriptionData.exactitud || 0,
-                    imagen: transcriptionData.imagen || null,
-                    seleccionEnviada: false, // Campo para rastrear confirmación
-                  },
-                ];
+                {
+                  correo_id: transcriptionData.correo_id,
+                  cantidad: Number(transcriptionData.cantidad),
+                  codigo_prediccion: transcriptionData.codigo_prediccion,
+                  descripcion:
+                    transcriptionData.descripcion || "Sin descripción",
+                  descripcion_csv: transcriptionData.descripcion_csv || "",
+                  id_article: transcriptionData.id_article,
+                  exactitud: transcriptionData.exactitud || 0,
+                  imagen: transcriptionData.imagen || null,
+                  seleccionEnviada: false, // Campo para rastrear confirmación
+                },
+              ];
           })
           .flat();
         setProductos(productosProcesados);
@@ -132,12 +137,12 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
     const productosActualizados = productos.map((producto) =>
       producto.codigo_prediccion === codigoPrediccion
         ? {
-            ...producto,
-            codigo_prediccion: selectedOption,
-            descripcion_csv: descripcionArticulo,
-            id_article: selectedItem?.IDArticle || selectedOption,
-            seleccionEnviada: true, // Marcamos como confirmado
-          }
+          ...producto,
+          codigo_prediccion: selectedOption,
+          descripcion_csv: descripcionArticulo,
+          id_article: selectedItem?.IDArticle || selectedOption,
+          seleccionEnviada: true, // Marcamos como confirmado
+        }
         : producto
     );
     setProductos(productosActualizados);
@@ -168,47 +173,53 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
 
   const manejarSeleccionChange = async (
     selectedOption,
-    codigoPrediccion,
+    producto,  // Ahora pasamos el producto completo
     combinedValue,
     descripcion
   ) => {
+    const uniqueId = getUniqueId(producto);
     const descripcionArticulo = combinedValue.split(" - ")[1]?.trim() || "";
     const selectedItem = datosCSV.find((item) => item.CodArticle === selectedOption);
-    const productosActualizados = productos.map((producto) =>
-      producto.codigo_prediccion === codigoPrediccion
+    
+    // Aquí usamos producto.codigo_prediccion y producto.descripcion para identificar únicamente
+    const productosActualizados = productos.map((p) =>
+      p.codigo_prediccion === producto.codigo_prediccion && 
+      p.descripcion === producto.descripcion
         ? {
-            ...producto,
-            codigo_prediccion: selectedOption,
-            descripcion_csv: descripcionArticulo,
-            id_article: selectedItem?.IDArticle || selectedOption,
-            seleccionEnviada: true, // Marcamos como confirmado
-          }
-        : producto
+          ...p,
+          codigo_prediccion: selectedOption,
+          descripcion_csv: descripcionArticulo,
+          id_article: selectedItem?.IDArticle || selectedOption,
+          seleccionEnviada: true, // Marcamos como confirmado
+        }
+        : p
     );
+    
     setProductos(productosActualizados);
     try {
       await sendSeleccion(selectedOption, descripcion);
       setBusquedas((prevState) => ({
         ...prevState,
-        [codigoPrediccion]: combinedValue,
+        [uniqueId]: combinedValue,
       }));
       setOpcionesBusqueda((prevState) => ({
         ...prevState,
-        [codigoPrediccion]: [],
+        [uniqueId]: [],
       }));
     } catch (error) {
       console.error("Error al manejar la selección manual:", error);
     }
   };
 
-  const manejarBuscar = (valorBusqueda, productoId) => {
+  const manejarBuscar = (valorBusqueda, uniqueId) => {
     if (!valorBusqueda.trim()) {
       setOpcionesBusqueda((prev) => ({
         ...prev,
-        [productoId]: [],
+        [uniqueId]: [],
       }));
       return;
     }
+
     const busquedaNormalizada = valorBusqueda
       .trim()
       .toLowerCase()
@@ -226,20 +237,21 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
     });
     setOpcionesBusqueda((prev) => ({
       ...prev,
-      [productoId]:
-        resultados.length > 0
-          ? resultados.slice(0, 10)
-          : [{ Combined: "No hay coincidencias", CodArticle: "" }],
+      [uniqueId]: resultados.length > 0
+        ? resultados.slice(0, 10)
+        : [{ Combined: "No hay coincidencias", CodArticle: "" }],
     }));
   };
 
-  const manejarInputBusqueda = (valor, productoId) => {
+  const manejarInputBusqueda = (valor, producto) => {
+    const uniqueId = getUniqueId(producto);
     setBusquedas((prev) => ({
       ...prev,
-      [productoId]: valor,
+      [uniqueId]: valor,
     }));
-    manejarBuscar(valor, productoId);
+    manejarBuscar(valor, uniqueId, producto);
   };
+
 
   if (loading || productos.length === 0) {
     return (
@@ -288,8 +300,8 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
                 exactitud > 60
                   ? "#a5d6a7"
                   : exactitud > 40
-                  ? "#fff59d"
-                  : "#ef9a9a";
+                    ? "#fff59d"
+                    : "#ef9a9a";
 
               return (
                 <tr
@@ -335,28 +347,29 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
                     <div className="dropdown-container position-relative">
                       <div style={{ display: "flex", alignItems: "center" }}>
                         <input
+                          key={getUniqueId(producto)}
                           type="text"
                           className="form-control"
                           placeholder="Buscar..."
-                          value={busquedas[producto.codigo_prediccion] || ""}
+                          value={busquedas[getUniqueId(producto)] || ""}
                           onChange={(e) =>
-                            manejarInputBusqueda(e.target.value, producto.codigo_prediccion)
+                            manejarInputBusqueda(e.target.value, producto)
                           }
                         />
                       </div>
                       {isLoadingBusqueda[producto.codigo_prediccion] && (
                         <div>Cargando...</div>
                       )}
-                      {opcionesBusqueda[producto.codigo_prediccion]?.length > 0 && (
+                      {opcionesBusqueda[getUniqueId(producto)]?.length > 0 && (
                         <ul className="list-group mt-2 dropdown-list">
-                          {opcionesBusqueda[producto.codigo_prediccion].map((item) => (
+                          {opcionesBusqueda[getUniqueId(producto)].map((item) => (
                             <button
                               key={item.CodArticle || "no-coincidencia"}
                               className="list-group-item list-group-item-action p-4"
                               onClick={() =>
                                 manejarSeleccionChange(
                                   item.CodArticle,
-                                  producto.codigo_prediccion,
+                                  producto,
                                   item.Combined,
                                   producto.descripcion
                                 )
@@ -383,7 +396,8 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
                         if (inputValue === "" || regex.test(inputValue)) {
                           setProductos((prevProductos) =>
                             prevProductos.map((p) =>
-                              p.codigo_prediccion === producto.codigo_prediccion
+                              p.codigo_prediccion === producto.codigo_prediccion && 
+                              p.descripcion === producto.descripcion
                                 ? { ...p, cantidad: inputValue }
                                 : p
                             )
@@ -401,7 +415,7 @@ const Correos = ({ setProductosSeleccionados, idBoton }) => {
                         }
                         setProductos((prevProductos) =>
                           prevProductos.map((p) =>
-                            p.codigo_prediccion === producto.codigo_prediccion
+                            p.descripcion === producto.descripcion
                               ? { ...p, cantidad: parseFloat(numericValue) }
                               : p
                           )
